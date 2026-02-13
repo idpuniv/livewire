@@ -1,0 +1,228 @@
+/* ====================================
+   CARTES PRODUIT - Design Professionnel Épuré
+   ==================================== */
+
+.product-card-custom {
+  position: relative;
+  background: white;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.02, 0.54, 0.58, 1);
+  height: 260px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid #f0f0f0;
+}
+
+/* Image produit - 60% de la carte */
+.product-card-custom {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: #fafafa;
+}
+
+/* Overlay subtil au hover */
+.product-card-custom::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0);
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.product-card-custom:hover::after {
+  background: rgba(102, 126, 234, 0.02);
+}
+
+/* Contenu produit - bandeau blanc en bas */
+.product-content {
+  margin-top: auto;
+  background: white;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #f0f0f0;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+/* Nom du produit */
+.product-name-custom {
+  font-weight: 500;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 0.25rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: #1e293b;
+  letter-spacing: -0.01em;
+}
+
+/* Code produit */
+.product-content .text-muted {
+  font-size: 0.7rem;
+  color: #94a3b8 !important;
+  margin-bottom: 0.5rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Prix et stock */
+.product-content .d-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.product-price-custom {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.product-price-custom::before {
+  content: '€';
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-right: 1px;
+  color: #64748b;
+}
+
+.product-content small {
+  font-size: 0.65rem;
+  padding: 3px 8px;
+  background: #f1f5f9;
+  border-radius: 20px;
+  color: #475569 !important;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* Badge quantité - design minimaliste */
+.quantity-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: white;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.8rem;
+  z-index: 3;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  backdrop-filter: blur(4px);
+}
+
+/* État sélectionné - plus professionnel */
+.product-card-custom.selected {
+  border: 1px solid #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.12);
+}
+
+.product-card-custom.selected .product-content {
+  background: white;
+  border-top: 1px solid #e2e8f0;
+}
+
+.product-card-custom.selected .product-name-custom {
+  color: #1e293b;
+}
+
+.product-card-custom.selected .product-price-custom {
+  color: #667eea;
+}
+
+.product-card-custom.selected .product-price-custom::before {
+  color: #667eea;
+}
+
+/* Badge rupture de stock */
+.stock-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: white;
+  color: #ef4444;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 3;
+  border: 1px solid #fee2e2;
+  backdrop-filter: blur(4px);
+}
+
+/* État rupture de stock */
+.product-card-custom[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.product-card-custom[disabled]:hover {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.product-card-custom[disabled] .product-price-custom {
+  color: #94a3b8;
+}
+
+/* Produits sans image */
+.product-card-custom:not([style*="background-image"]),
+.product-card-custom[style*="background-image: url('')"],
+.product-card-custom[style*="background-image: url()"] {
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+}
+
+/* Animation subtile */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.product-card-custom {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Responsive */
+@media (max-width: 1400px) {
+  .product-card-custom {
+    height: 240px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .product-card-custom {
+    height: 220px;
+  }
+  
+  .product-name-custom {
+    font-size: 0.9rem;
+  }
+  
+  .product-price-custom {
+    font-size: 1rem;
+  }
+}

@@ -22,7 +22,18 @@ new class () extends Component {
     public bool $showQuantityModal = false;
     public $editingProductId = null;
     public $editingQuantity = 1;
-    protected $listeners = ['refreshPay' => '$refresh', 'clearCart2' => 'clearCart2'];
+    protected $listeners = [
+        'refreshPay' => '$refresh',
+        'clearCart2' => 'clearCart2',
+        'orderPaid' => 'orderPaid',
+    ];
+
+    protected function getListeners()
+    {
+        return [
+            'echo:products,product.updated' => 'handleProductUpdate'
+        ];
+    }
 
     public function mount()
     {
@@ -177,7 +188,7 @@ new class () extends Component {
                         'updated_at' => now()
                     ];
 
-                    $stockUpdates[$product->id] = $item->quantity;
+                    // $stockUpdates[$product->id] = $item->quantity;
                 }
 
                 if (!empty($orderItemsData)) {
@@ -290,6 +301,7 @@ new class () extends Component {
             }
         }
 
+        $this->dispatch('refreshPay');
         $this->closeQuantityModal();
     }
 
@@ -424,8 +436,9 @@ new class () extends Component {
 
     public function clearCart()
     {
-        if ($this->order) {
-            return;
+        if ($this->order && $this->order === Status::PENDING) {
+            $this->order->delete();
+            $this->order = null;
         }
         foreach ($this->products as &$p) {
             $p['quantity'] = 0;
@@ -434,6 +447,7 @@ new class () extends Component {
 
         if ($this->cart) {
             CartItem::where('cart_id', $this->cart->id)->delete();
+            $this->order = null;
         }
         $this->dispatch('refreshPay');
     }
@@ -450,9 +464,34 @@ new class () extends Component {
         }
     }
 
+    public function orderPaid($orderId)
+    {
+        $this->order = null;
+    }
+
     public function sortSelected()
     {
-        // TODO
+        // Séparer les produits sélectionnés et non sélectionnés
+        $selected = [];
+        $notSelected = [];
+
+        foreach ($this->products as $product) {
+            if ($product['selected']) {
+                $selected[] = $product;
+            } else {
+                $notSelected[] = $product;
+            }
+        }
+
+        // Trier les sélectionnés par total (prix × quantité) décroissant
+        usort($selected, function ($a, $b) {
+            $totalA = $a['price'] * $a['quantity'];
+            $totalB = $b['price'] * $b['quantity'];
+            return $totalB <=> $totalA;
+        });
+
+        // Fusionner : sélectionnés en premier, puis non sélectionnés
+        $this->products = array_merge($selected, $notSelected);
     }
 
     public function getSelectedCountProperty()
@@ -481,9 +520,9 @@ new class () extends Component {
                         <span class="input-group-text bg-white border-end-0">
                             <i class="fas fa-search text-muted"></i>
                         </span>
-                        <input type="text" class="form-control border-start-0 ps-0" 
-                               placeholder="Rechercher produit..." 
-                               wire:model.live.debounce.300ms="search" autofocus>
+                        <input type="text" class="form-control border-start-0 ps-0"
+                            placeholder="Rechercher produit..."
+                            wire:model.live.debounce.300ms="search" autofocus>
                     </div>
                     <div class="d-flex justify-content-between align-items-center mt-2">
                         <div class="text-muted">
@@ -491,10 +530,9 @@ new class () extends Component {
                         </div>
                         <div class="d-flex gap-2">
                             <button
-                                class="btn btn-light btn-sm px-3 d-flex align-items-center
-                                @if($order) opacity-50 @endif"
+                                class="btn btn-light btn-sm px-3 d-flex align-items-center"
                                 wire:click="clearCart"
-                                @if($order) disabled @endif>
+                                @if(!$order && !$cart) disabled @endif>
                                 <i class="fas fa-times-circle me-1"></i> Vider
                                 <div class="position-relative ms-2">
                                     <i class="fas fa-shopping-cart fs-5"></i>
@@ -515,26 +553,101 @@ new class () extends Component {
 
                 <!-- Produits -->
                 <div class="products-container">
-                    <div class="products-grid">
+                    <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-4 g-3">
                         @foreach($this->filteredProducts as $product)
-                        <div class="product-card-custom {{ $product['selected'] ? 'selected' : '' }}"
-                            style="background-image: url('{{ $product['image'] }}')"
-                            wire:click="addToCart({{ $product['id'] }})"
-                            @if($product['stock']===0) disabled @endif>
+                        <div class="col">
+                            <div class="card h-100 product-card {{ $product['selected'] ? 'selected' : '' }} {{ $product['stock'] === 0 ? 'opacity-50' : '' }}"
+                                wire:click="addToCart({{ $product['id'] }})"
+                                @if($product['stock']===0) disabled @endif
+                                style="cursor: pointer;">
 
-                            @if($product['selected'])
-                            <div class="quantity-badge" wire:click.stop="openQuantityModal({{ $product['id'] }})">
-                                {{ $product['quantity'] }}
-                            </div>
-                            @endif
+                                <!-- Image container avec position relative pour le bouton -->
+                                <div class="position-relative">
 
-                            <div class="product-content">
-                                <div class="product-name-custom">{{ $product['name'] }}</div>
-                                <div class="text-muted mb-3">Code: {{ $product['code'] }}</div>
-                                <div class="mt-auto">
-                                    <div class="d-flex justify-content-between align-items-end">
-                                        <div class="product-price-custom text-success">{{ number_format($product['price'], 2) }}</div>
-                                        <small class="text-muted">Stock: {{ $product['stock'] }}</small>
+                                    <!-- Condition : image ou SVG générique -->
+                                    @if($product['image'])
+                                    <img src="{{ $product['image'] }}"
+                                        class="card-img-top"
+                                        alt="{{ $product['name'] }}"
+                                        style="height: 160px; object-fit: cover; aspect-ratio: 1/1;">
+                                    @else
+                                    <div class="card-img-top bg-light d-flex align-items-center justify-content-center"
+                                        style="height: 160px; aspect-ratio: 1/1;">
+                                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="1.2">
+                                            <!-- Boîte / carton -->
+                                            <rect x="3" y="7" width="18" height="14" rx="2" stroke="currentColor" />
+                                            <path d="M7 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2" stroke="currentColor" />
+                                            <!-- Rabats du carton -->
+                                            <path d="M3 7L8 12M21 7L16 12M8 12L3 17M16 12L21 17" stroke="currentColor" stroke-width="1" />
+                                            <!-- Étiquette -->
+                                            <circle cx="12" cy="12" r="2" fill="#e9ecef" stroke="currentColor" />
+                                            <path d="M12 10V14M10 12H14" stroke="currentColor" stroke-width="1.2" />
+                                        </svg>
+                                    </div>
+                                    @endif
+
+                                    <!-- Badges promotionnels -->
+                                    <div class="position-absolute top-0 start-0 p-2 d-flex gap-1">
+                                        @if($product['promo_percent'] ?? false)
+                                        <span class="badge bg-danger">-{{ $product['promo_percent'] }}%</span>
+                                        @endif
+                                        @if($product['choice'] ?? false)
+                                        <span class="badge bg-warning text-dark">Choice</span>
+                                        @endif
+                                    </div>
+
+                                    <!-- Bouton ajouter / quantité -->
+                                    @if($product['selected'])
+                                    <button class="position-absolute bottom-0 end-0 m-2 btn btn-primary rounded-circle d-flex align-items-center justify-content-center p-0"
+                                        style="width: 32px; height: 32px;"
+                                        wire:click.stop="openQuantityModal({{ $product['id'] }})">
+                                        {{ $product['quantity'] }}
+                                    </button>
+                                    @else
+                                    <button class="position-absolute bottom-0 end-0 m-2 btn btn-light rounded-circle d-flex align-items-center justify-content-center p-0 border"
+                                        style="width: 32px; height: 32px;"
+                                        wire:click.stop="addToCart({{ $product['id'] }})"
+                                        @if($product['stock']===0) disabled @endif>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M12 6V18M6 12H18" />
+                                        </svg>
+                                    </button>
+                                    @endif
+                                </div>
+
+                                <!-- Corps de la carte -->
+                                <div class="card-body p-2 d-flex flex-column">
+                                    <h6 class="card-title mb-1 small fw-semibold"
+                                        style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.4rem;">
+                                        {{ $product['name'] }}
+                                    </h6>
+
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        @if($product['rating'] ?? false)
+                                        <div class="d-flex align-items-center gap-1 small">
+                                            <span style="color: #ffb800;">★★★★★</span>
+                                            <span class="text-muted">{{ $product['rating'] }}</span>
+                                        </div>
+                                        @endif
+                                        @if($product['sold_count'] ?? false)
+                                        <small class="text-muted">{{ number_format($product['sold_count']) }} vendus</small>
+                                        @endif
+                                    </div>
+
+                                    <div class="d-flex justify-content-between align-items-baseline mt-1">
+                                        <div>
+                                            @if(($product['original_price'] ?? 0) > $product['price'])
+                                            <small class="text-muted text-decoration-line-through me-1">
+                                                {{ number_format($product['original_price'], 0) }}
+                                            </small>
+                                            @endif
+                                            <span class="fw-bold {{ $product['selected'] ? 'text-primary' : 'text-success' }}">
+                                                {{ number_format($product['price'], 0) }} XOF
+                                            </span>
+                                        </div>
+                                        <small class="text-{{ $product['stock'] < 5 ? 'warning' : 'muted' }}">
+                                            {{ $product['stock'] }} stock
+                                        </small>
                                     </div>
                                 </div>
                             </div>
@@ -557,30 +670,39 @@ new class () extends Component {
                         </div>
 
                         <div class="d-flex gap-2">
-                            @if(!$order)
-                            <button class="btn btn-primary btn-sm" wire:click="createCheckout">
-                                Créer la commande
-                            </button>
-                            @else
-                            <button class="btn btn-success d-md-none btn-sm" type="button" 
-                                    data-bs-toggle="offcanvas" 
-                                    data-bs-target="#offcanvasPay">
-                                <i class="fas fa-credit-card me-1"></i> 
-                                Payer #{{ $order->id }}
-                            </button>
-                            @endif
-                        </div>
+    <!-- Desktop : toujours afficher Créer (désactivé si order existe) -->
+    <button class="btn btn-primary btn-sm d-none d-md-block"
+        wire:click="createCheckout"
+        @if($order) disabled @endif>
+        Créer la commande
+    </button>
+
+    <!-- Mobile : afficher Créer OU Payer, jamais les deux -->
+    @if(!$order)
+    <button class="btn btn-primary btn-sm d-md-none"
+        wire:click="createCheckout">
+        Créer la commande
+    </button>
+    @else
+    <button class="btn btn-success d-md-none btn-sm" type="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#offcanvasPay">
+        <i class="fas fa-credit-card me-1"></i>
+        Payer #{{ $order->id }}
+    </button>
+    @endif
+</div>
                     </div>
                 </div>
 
                 <!-- MODAL POUR MODIFIER LA QUANTITÉ - COMPLET -->
                 @if($showQuantityModal)
-                <div class="modal fade show d-block" 
-                     style="background-color: rgba(0,0,0,0.5); z-index: 1050;" 
-                     tabindex="-1" 
-                     role="dialog"
-                     aria-modal="true"
-                     wire:key="quantity-modal-{{ $editingProductId }}">
+                <div class="modal fade show d-block"
+                    style="background-color: rgba(0,0,0,0.5); z-index: 1050;"
+                    tabindex="-1"
+                    role="dialog"
+                    aria-modal="true"
+                    wire:key="quantity-modal-{{ $editingProductId }}">
                     <div class="modal-dialog modal-dialog-centered">
                         <div class="modal-content border-0 shadow-lg">
                             <div class="modal-header bg-light border-bottom">
@@ -590,24 +712,24 @@ new class () extends Component {
                                 </h5>
                                 <button type="button" class="btn-close" wire:click="closeQuantityModal"></button>
                             </div>
-                            
+
                             <form wire:submit.prevent="saveQuantity">
                                 <div class="modal-body">
                                     @php
-                                        $product = collect($products)->first(fn($p) => $p['id'] == $editingProductId);
+                                    $product = collect($products)->first(fn($p) => $p['id'] == $editingProductId);
                                     @endphp
-                                    
+
                                     @if($product)
                                     <div class="mb-4">
                                         <div class="d-flex align-items-center mb-3">
                                             @if($product['image'])
-                                            <img src="{{ $product['image'] }}" 
-                                                 alt="{{ $product['name'] }}" 
-                                                 class="rounded me-3" 
-                                                 style="width: 60px; height: 60px; object-fit: cover;">
+                                            <img src="{{ $product['image'] }}"
+                                                alt="{{ $product['name'] }}"
+                                                class="rounded me-3"
+                                                style="width: 60px; height: 60px; object-fit: cover;">
                                             @else
-                                            <div class="bg-light rounded me-3 d-flex align-items-center justify-content-center" 
-                                                 style="width: 60px; height: 60px;">
+                                            <div class="bg-light rounded me-3 d-flex align-items-center justify-content-center"
+                                                style="width: 60px; height: 60px;">
                                                 <i class="fas fa-box text-muted fa-2x"></i>
                                             </div>
                                             @endif
@@ -617,29 +739,29 @@ new class () extends Component {
                                                 <div class="text-success fw-bold">{{ number_format($product['price'], 2) }}</div>
                                             </div>
                                         </div>
-                                        
+
                                         <label class="form-label fw-semibold">Quantité</label>
                                         <div class="d-flex align-items-center gap-3">
-                                            <button type="button" 
-                                                    class="btn btn-outline-secondary" 
-                                                    wire:click="$set('editingQuantity', {{ max(0, $editingQuantity - 1) }})"
-                                                    @if($editingQuantity <= 0) disabled @endif>
+                                            <button type="button"
+                                                class="btn btn-outline-secondary"
+                                                wire:click="$set('editingQuantity', {{ max(0, $editingQuantity - 1) }})"
+                                                @if($editingQuantity <=0) disabled @endif>
                                                 <i class="fas fa-minus"></i>
                                             </button>
                                             <input type="number"
-                                                   class="form-control text-center form-control-lg"
-                                                   wire:model="editingQuantity"
-                                                   min="0"
-                                                   max="{{ $product['stock'] }}"
-                                                   autofocus>
-                                            <button type="button" 
-                                                    class="btn btn-outline-secondary" 
-                                                    wire:click="$set('editingQuantity', {{ min($product['stock'], $editingQuantity + 1) }})"
-                                                    @if($editingQuantity >= $product['stock']) disabled @endif>
+                                                class="form-control text-center form-control-lg"
+                                                wire:model="editingQuantity"
+                                                min="0"
+                                                max="{{ $product['stock'] }}"
+                                                autofocus>
+                                            <button type="button"
+                                                class="btn btn-outline-secondary"
+                                                wire:click="$set('editingQuantity', {{ min($product['stock'], $editingQuantity + 1) }})"
+                                                @if($editingQuantity>= $product['stock']) disabled @endif>
                                                 <i class="fas fa-plus"></i>
                                             </button>
                                         </div>
-                                        
+
                                         <div class="d-flex justify-content-between mt-3">
                                             <div class="text-muted">
                                                 <i class="fas fa-boxes me-1"></i> Stock: {{ $product['stock'] }}
@@ -668,7 +790,7 @@ new class () extends Component {
 
             </div>
         </main>
-        
+
         <!-- Sidebar grands écrans - Pay toujours visible -->
         <aside class="right-aside layout d-none d-lg-block">
             <livewire:pay
@@ -679,20 +801,39 @@ new class () extends Component {
     </div>
 
     <!-- OFFCANVAS POUR MOBILES - Le composant Pay DANS l'offcanvas -->
-    <div class="offcanvas offcanvas-sm offcanvas-bottom d-lg-none h-75" tabindex="-1" id="offcanvasPay" 
-         aria-labelledby="offcanvasPayLabel" wire:ignore.self>
+    <div class="offcanvas offcanvas-sm offcanvas-bottom d-lg-none h-75" tabindex="-1" id="offcanvasPay"
+        aria-labelledby="offcanvasPayLabel" wire:ignore.self>
         <div class="offcanvas-header bg-light">
             <h5 class="offcanvas-title" id="offcanvasPayLabel">
-                <!--  -->
+                @if($order && $order->status === 'confirmed')
+                <span class="text-success">
+                    <i class="fas fa-check-circle me-2"></i>Commande #{{ $order->id }} payée
+                </span>
+                @else
+                <span>Paiement</span>
+                @endif
             </h5>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
         </div>
         <div class="offcanvas-body p-0">
-            <livewire:pay 
-                :order="$order" 
-                :cart="$cart" 
-                :wire:key="'pay-mobile-'.($order->id ?? 'empty-'.Str::random(4))"
-            />
+            @if($order && $order->status === App\Enums\Status::CONFIRMED)
+            <div class="d-flex flex-column align-items-center justify-content-center h-100 py-5">
+                <div class="bg-success bg-opacity-10 rounded-circle p-4 mb-3">
+                    <i class="fas fa-check text-success fa-3x"></i>
+                </div>
+                <h5 class="fw-bold text-success mb-1">Paiement réussi !</h5>
+                <p class="text-muted mb-2">Commande #{{ $order->id }}</p>
+                <p class="fw-bold text-dark fs-4 mb-3">{{ number_format($order->amount_paid ?? $order->invoice?->total ?? 0, 2) }}</p>
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="offcanvas">
+                    Fermer
+                </button>
+            </div>
+            @else
+            <livewire:pay
+                :order="$order"
+                :cart="$cart"
+                :wire:key="'pay-mobile-'.($order->id ?? 'empty-'.Str::random(4))" />
+            @endif
         </div>
     </div>
 
@@ -709,16 +850,15 @@ new class () extends Component {
     });
 
     // Sélectionner ton offcanvas
-const offcanvasEl = document.getElementById('offcanvasPay');
-const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+    const offcanvasEl = document.getElementById('offcanvasPay');
+    const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
 
-// Écouter le redimensionnement
-window.addEventListener('resize', () => {
-    if (window.innerWidth >= 992) { // lg et plus
-        bsOffcanvas.hide();
-    }
-});
-
+    // Écouter le redimensionnement
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 992) { // lg et plus
+            bsOffcanvas.hide();
+        }
+    });
 </script>
 
 

@@ -1,0 +1,153 @@
+/* Carte produit améliorée avec image de fond */
+.product-card-custom {
+  border: 2px solid transparent;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: 180px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background-color: white;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  overflow: hidden;
+}
+
+/* Overlay pour améliorer la lisibilité du texte sur l'image */
+.product-card-custom::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.3) 30%,
+    rgba(255, 255, 255, 0.95) 70%,
+    rgba(255, 255, 255, 1) 100%
+  );
+  z-index: 1;
+  border-radius: 0.75rem;
+}
+
+/* Conteneur pour le contenu (doit être au-dessus de l'overlay) */
+.product-content {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* États de la carte produit */
+.product-card-custom:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0.5rem 1.5rem rgba(102, 126, 234, 0.15);
+  border-color: #667eea;
+}
+
+.product-card-custom.selected {
+  border-color: #667eea;
+  box-shadow: 0 0.5rem 1.5rem rgba(102, 126, 234, 0.25);
+}
+
+.product-card-custom.selected::before {
+  background: linear-gradient(
+    to bottom,
+    rgba(102, 126, 234, 0.2) 0%,
+    rgba(102, 126, 234, 0.3) 30%,
+    rgba(102, 126, 234, 0.9) 70%,
+    rgba(102, 126, 234, 1) 100%
+  );
+}
+
+.product-card-custom.selected .text-muted {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.product-card-custom.selected .text-success {
+  color: white !important;
+}
+
+.product-card-custom.selected .product-name-custom {
+  color: white;
+}
+
+.product-card-custom.selected small {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Pour les produits en rupture de stock */
+.product-card-custom[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.product-card-custom[disabled]::before {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.9) 100%
+  );
+}
+
+/* Badge quantité */
+.quantity-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #28a745;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  z-index: 3;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Nom du produit */
+.product-name-custom {
+  font-weight: 600;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: #333;
+}
+
+/* Prix */
+.product-price-custom {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #28a745;
+}
+
+/* Header produit */
+.product-header-custom {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+  border-radius: 0.75rem 0.75rem 0 0;
+}
+
+/* Footer produit */
+.product-footer-custom {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #dee2e6;
+  background: #f8f9fa;
+  border-radius: 0 0 0.75rem 0.75rem;
+}

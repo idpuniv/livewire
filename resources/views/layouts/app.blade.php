@@ -27,6 +27,7 @@
     <!-- Livewire Styles -->
     @livewireStyles
 
+    <link rel="stylesheet" href="{{ asset('css/layout.css') }}">
     <link rel="stylesheet" href="{{ asset('css/produit.css') }}">
 </head>
 

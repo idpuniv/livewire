@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Status;
 use Livewire\Component;
 use App\Models\Order;
 use App\Models\Cart;
@@ -99,30 +100,30 @@ new class () extends Component {
                 'user_id'   => Auth::id(),
                 'method'    => $this->paymentMethod,
                 'amount'    => $total,
-                'status'    => 'success',
+                'status'           => Status::SUCCESS,
             ]);
 
             Transaction::create([
                 'payment_id'       => $payment->id,
                 'transaction_type' => 'payment',
                 'amount'           => $total,
-                'status'           => 'success',
+                'status'           => Status::SUCCESS,
             ]);
 
             $this->order->update([
-                'status'       => 'confirmed',
+                'status'       => Status::CONFIRMED,
                 'amount_paid'  => $total,
             ]);
 
             $this->order->invoice->update([
-                'status' => 'paid',
+                'status' => Status::PAID,
             ]);
 
             DB::commit();
-
+            event(new \App\Events\OrderPayed($this->order));
             $this->order = Order::with(['items', 'invoice'])->find($this->order->id);
 
-            $this->dispatch('order-paid', orderId: $this->order->id);
+            $this->dispatch('orderPaid', orderId: $this->order->id);
             $this->dispatch('clearCart2');
             $this->order = null;
             $this->syncAmounts();
@@ -143,83 +144,82 @@ new class () extends Component {
 ?>
 
 
-<div class="section-card h-100 px-2">
-    <div class="card-header-custom p-3">
-        <h3 class="h5 mb-0">
-            <i class="fas fa-cash-register me-2"></i> Paiement - Commande
-             @if($order)
-                <span>#{{$order?->id}}</span>
-             @endif
-        </h3>
-       
+<div class="card border-0 shadow-sm rounded-10 h-100">
+    {{-- Header --}}
+    <div class="card-header bg-white border-0 pt-4 px-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-semibold">
+                <i class="fas fa-credit-card me-2 text-primary"></i>
+                Paiement
+            </h5>
+            @if($order)
+                <span class="badge bg-dark text-white px-3 py-2 rounded-pill">
+                    N° {{ $order->id }}
+                </span>
+            @endif
+        </div>
     </div>
 
-    <div class="card-body-custom px-2">
-
-        {{-- Résumé --}}
+    {{-- Body --}}
+    <div class="card-body px-4">
+        {{-- Récapitulatif --}}
         <div class="mb-4">
             <div class="d-flex justify-content-between mb-2">
-                <span class="text-muted">Sous-total:</span>
-                <span class="fw-bold">
-                    {{ number_format($order?->invoice?->subtotal ?? $cart->subtotal ?? 0, 2) }}
-                </span>
+                <span class="text-secondary">Sous-total</span>
+                <span class="fw-medium">{{ number_format($order?->invoice?->subtotal ?? $cart->subtotal ?? 0, 2) }} XOF</span>
             </div>
-
-            <div class="d-flex justify-content-between mb-2">
-                <span class="text-danger">TVA:</span>
-                <span class="fw-bold text-danger">
-                    {{ number_format($order?->invoice?->tax ?? $cart?->tax ?? 0, 2) }}
-                </span>
+            <div class="d-flex justify-content-between">
+                <span class="text-secondary">TVA (20%)</span>
+                <span class="fw-medium text-danger">{{ number_format($order?->invoice?->tax ?? $cart?->tax ?? 0, 2) }} XOF</span>
             </div>
         </div>
 
-        <div class="border-top pt-3 mb-4">
+        {{-- Total --}}
+        <div class="bg-light rounded-3 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <div class="fw-bold fs-5">Total à payer</div>
-                    <small class="text-muted">
-                        {{ $order?->items?->count() ?? $cart->items?->count() ?? 0 }} articles •
-                        {{ $order?->items?->sum('quantity') ?? $cart?->items?->sum('quantity') ?? 0 }} unités
-                    </small>
-                </div>
-                <div class="display-5 fw-bold text-primary">
-                    {{ number_format($order?->invoice?->total ?? $cart?->total ?? 0, 2) }}
-                </div>
+                <span class="fw-semibold">Total à payer</span>
+                <span class="h4 mb-0 text-primary fw-bold">{{ number_format($order?->invoice?->total ?? $cart?->total ?? 0, 2) }} XOF</span>
             </div>
+            <small class="text-secondary d-block mt-1">
+                {{ $order?->items?->count() ?? $cart->items?->count() ?? 0 }} articles • 
+                {{ $order?->items?->sum('quantity') ?? $cart?->items?->sum('quantity') ?? 0 }} unités
+            </small>
         </div>
 
-        <div class="mb-4">
-            <label class="form-label fw-bold">Montant remis</label>
-
-            <div class="input-group input-group-lg mb-3">
-                <span class="input-group-text">XOF</span>
+        {{-- Montant remis --}}
+        <div class="mb-3">
+            <label class="form-label small fw-medium text-secondary mb-1">Montant remis</label>
+            <div class="input-group">
                 <input
                     type="number"
-                    class="form-control text-end fs-5"
+                    class="form-control form-control-lg bg-light border-0"
+                    placeholder="0"
                     step="0.01"
                     wire:model.lazy="amountPaid"
                 />
+                <span class="input-group-text bg-light border-0 text-secondary">XOF</span>
             </div>
+        </div>
 
-            <div class="alert alert-success text-center py-3">
-                <div class="text-muted mb-1">Monnaie à rendre</div>
-                <div class="fs-3 fw-bold">
-                    {{ number_format($change, 2) }}
-                </div>
+        {{-- Monnaie --}}
+        <div class="bg-success bg-opacity-10 rounded-3 p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="text-success small fw-medium">Monnaie à rendre</span>
+                <span class="h5 mb-0 text-success fw-bold">{{ number_format($change, 2) }} XOF</span>
             </div>
         </div>
     </div>
 
-    <div class="card-footer-custom">
-        <div class="d-grid gap-2">
-
-            <button
-                type="button"
-                class="btn btn-primary btn-lg"
-                wire:click="pay"
-            >
-                <i class="fas fa-credit-card me-1"></i> Procéder au paiement
-            </button>
-        </div>
+    {{-- Footer --}}
+    <div class="card-footer bg-white border-0 pb-4 px-4">
+        <button
+            type="button"
+            class="btn btn-primary w-100 py-3 fw-medium"
+            wire:click="pay"
+        >
+            <i class="fas fa-check me-2"></i>
+            Confirmer le paiement
+        </button>
     </div>
 </div>
+
