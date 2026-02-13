@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 
-
 Route::get('/', function () {
     return view('welcome');
 });
@@ -13,6 +12,10 @@ Route::livewire('/ventes', 'pages::sales.create');
 Route::livewire('/caisse', 'pages::payments.create');
 Route::livewire('/users', 'pages::users.create');
 Route::livewire('/users2', 'pages::users.create2');
+
+Route::get('/products/list', function () {
+    return view('products');
+});
 
 
 

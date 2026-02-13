@@ -2,48 +2,32 @@
 
 namespace App\Events;
 
+use App\Models\Product;
 use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
-class ProductUpdated implements ShouldBroadcast
+class ProductUpdated implements ShouldBroadcastNow
 {
-    use Dispatchable;
-    use InteractsWithSockets;
-    use SerializesModels;
+    use Dispatchable, SerializesModels;
 
-    public string $action; // 'created', 'updated', 'deleted', 'stock_changed'
-    public ?array $product; // Données du produit concerné
-    public ?int $productId; // ID si supprimé
+    public $product;
 
-    public function __construct(string $action, $product = null, ?int $productId = null)
+    public function __construct(Product $product)
     {
-        $this->action = $action;
-
-        if ($product) {
-            $this->product = [
-                'id' => $product->id,
-                'name' => $product->name,
-                'code' => $product->code,
-                'price' => $product->price,
-                'stock' => $product->stock,
-                'image' => $product->image,
-            ];
-        }
-
-        $this->productId = $productId ?? ($product?->id);
+        $this->product = $product;
     }
 
-    public function broadcastOn(): array
+    public function broadcastOn(): Channel
     {
-        return [
-            new Channel('products'),
-        ];
+        Log::info('broadcasted');
+        return new Channel('products');
     }
 
-    public function broadcastAs(): string
+    public function broadcastAs()
     {
         return 'product.updated';
     }
