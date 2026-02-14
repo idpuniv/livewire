@@ -8,12 +8,12 @@ use App\Models\Payment;
 use App\Models\Transaction;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use App\Events\PaymentCompleted;
 
 new class () extends Component {
     public ?Order $order = null;
 
-    public float $amountPaid = 0;
+    public $amountPaid = 0;
     public float $change = 0;
     public string $paymentMethod = 'cash';
     public ?Cart $cart = null;
@@ -74,8 +74,9 @@ new class () extends Component {
 
     private function calculateChange(): void
     {
-        $total = $this->order?->invoice?->total ?? 0;
-        $this->change = max($this->amountPaid - $total, 0);
+        $total = floatval($this->order?->invoice?->total ?? 0);
+        $amountPaid = floatval($this->amountPaid ?? 0);
+        $this->change = max($amountPaid - $total, 0);
     }
 
     public function pay(): void
@@ -120,10 +121,9 @@ new class () extends Component {
             ]);
 
             DB::commit();
-            event(new \App\Events\OrderPayed($this->order));
+            event(new PaymentCompleted($payment));
             $this->order = Order::with(['items', 'invoice'])->find($this->order->id);
 
-            $this->dispatch('orderPaid', orderId: $this->order->id);
             $this->dispatch('clearCart2');
             $this->order = null;
             $this->syncAmounts();
@@ -214,6 +214,7 @@ new class () extends Component {
     <div class="card-footer bg-white border-0 pb-4 px-4">
         <button
             type="button"
+            @if(!$order) disabled @endif
             class="btn btn-primary w-100 py-3 fw-medium"
             wire:click="pay"
         >

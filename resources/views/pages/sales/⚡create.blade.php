@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Enums\Status;
 use Illuminate\Support\Facades\Log;
 
-new class() extends Component {
+new class () extends Component {
     public string $search = '';
     public $subtotal = 0;
     public array $products = [];
@@ -24,10 +24,11 @@ new class() extends Component {
     public $editingProductId = null;
     public $editingQuantity = 1;
     protected $listeners = [
-        'refreshPay' => '$refresh',
         'clearCart2' => 'clearCart2',
+        'refreshPay' => '$refresh',
         'orderPaid' => 'orderPaid',
-        'echo:products,.product.updated' => 'handleProductUpdate'
+        'echo:products,.product.updated' => 'handleProductUpdate',
+        'echo:payments,.payment.completed' => 'handleProductUpdate'
     ];
 
     //     protected function getListeners()
@@ -47,36 +48,16 @@ new class() extends Component {
 
     public function handleProductUpdate($payload)
     {
-        Log::info('Livewire: produit mis à jour', ['payload' => $payload]);
+        Log::info('handleProductUpdate called', ['payload' => $payload]);
 
-        $updatedProduct = $payload['product'] ?? null;
+        // Recharge tous les produits
+        $this->loadProducts();
 
-        if (!$updatedProduct) {
-            return;
-        }
-
-        $found = false;
-
-        // Met à jour le produit dans le tableau products
-        foreach ($this->products as $index => $product) {
-            if ($product['id'] == $updatedProduct['id']) {
-                $this->products[$index]['name'] = $updatedProduct['name'];
-                $this->products[$index]['price'] = floatval($updatedProduct['price']);
-                $this->products[$index]['stock'] = intval($updatedProduct['stock']);
-                $this->products[$index]['image'] = $updatedProduct['image'] ?? $product['image'];
-                $found = true;
-                break;
-            }
-        }
-
-        // Si le produit n'existe pas dans le tableau (nouveau produit), on recharge tout
-        if (!$found) {
-            $this->loadProducts();
-        }
-
-        // Force la mise à jour de la vue
+        // force le rafraîchissement
         $this->dispatch('$refresh');
     }
+
+
 
 
     public function loadProducts()
@@ -134,6 +115,19 @@ new class() extends Component {
             'status' => 'pending'
         ]);
     }
+
+    public function clearCart2()
+    {
+        foreach ($this->products as &$p) {
+            $p['quantity'] = 0;
+            $p['selected'] = false;
+        }
+
+        if ($this->cart) {
+            CartItem::where('cart_id', $this->cart->id)->delete();
+        }
+    }
+
 
     protected function syncCartItems()
     {
@@ -265,7 +259,7 @@ new class() extends Component {
         $search = strtolower($this->search);
         return array_filter(
             $this->products,
-            fn($p) =>
+            fn ($p) =>
             str_contains(strtolower($p['name']), $search) ||
                 str_contains(strtolower($p['code']), $search)
         );
@@ -273,7 +267,7 @@ new class() extends Component {
 
     public function openQuantityModal($productId)
     {
-        $product = collect($this->products)->first(fn($p) => $p['id'] == $productId);
+        $product = collect($this->products)->first(fn ($p) => $p['id'] == $productId);
         if ($product) {
             $this->editingProductId = $productId;
             $this->editingQuantity = $product['quantity'] ?: 1;
@@ -290,7 +284,7 @@ new class() extends Component {
         $productId = $this->editingProductId;
         $newQuantity = $this->editingQuantity;
 
-        $product = collect($this->products)->first(fn($p) => $p['id'] == $productId);
+        $product = collect($this->products)->first(fn ($p) => $p['id'] == $productId);
 
         if ($product) {
             $dbProduct = Product::find($productId);
@@ -350,7 +344,7 @@ new class() extends Component {
 
     public function addToCart($productId)
     {
-        $product = collect($this->products)->first(fn($p) => $p['id'] == $productId);
+        $product = collect($this->products)->first(fn ($p) => $p['id'] == $productId);
         if (!$product || $product['stock'] <= $product['quantity']) {
             return;
         }
@@ -488,18 +482,6 @@ new class() extends Component {
         $this->dispatch('refreshPay');
     }
 
-    public function clearCart2()
-    {
-        foreach ($this->products as &$p) {
-            $p['quantity'] = 0;
-            $p['selected'] = false;
-        }
-
-        if ($this->cart) {
-            CartItem::where('cart_id', $this->cart->id)->delete();
-        }
-    }
-
     public function orderPaid($orderId)
     {
         $this->order = null;
@@ -532,12 +514,12 @@ new class() extends Component {
 
     public function getSelectedCountProperty()
     {
-        return count(array_filter($this->products, fn($p) => $p['selected']));
+        return count(array_filter($this->products, fn ($p) => $p['selected']));
     }
 
     public function getCartTotalProperty()
     {
-        return array_sum(array_map(fn($p) => $p['selected'] ? $p['price'] * $p['quantity'] : 0, $this->products));
+        return array_sum(array_map(fn ($p) => $p['selected'] ? $p['price'] * $p['quantity'] : 0, $this->products));
     }
 };
 

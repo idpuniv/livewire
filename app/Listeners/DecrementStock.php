@@ -2,41 +2,48 @@
 
 namespace App\Listeners;
 
-use App\Events\OrderPayed;
-use App\Models\OrderItem;
+use App\Events\PaymentCompleted;
 use App\Models\Product;
-use App\Enums\Status;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
 
 class DecrementStock
 {
-    /**
-     * Create the event listener.
-     */
-    public function __construct()
+    public function handle(PaymentCompleted $event)
     {
-        //
-    }
 
-    /**
-     * Handle the event.
-     */
-    public function handle(OrderPayed $event): void
-    {
-        $order = $event->order;
-        // Log::info('order id', $order->id);
+        Log::info("from decrement stock");
+        $order = $event->payment->order;
 
-        if ($order->status === Status::PAID || $order->status === Status::CONFIRMED) {
-            $orderItems = OrderItem::where('order_id', $order->id)
-                ->get(['product_id', 'quantity']);
+        // Récupère tous les items de la commande
+        $orderItems = $order->items->mapWithKeys(function ($item) {
+            return [$item->product_id => $item->quantity];
+        })->toArray(); // [product_id => quantity]
 
-            foreach ($orderItems as $item) {
-                Product::where('id', $item->product_id)
-                    ->update(['stock' => DB::raw("stock - {$item->quantity}")]);
-            }
+        if (empty($orderItems)) {
+            return;
+        }
+
+        try {
+            DB::transaction(function () use ($orderItems) {
+                // Décrémente tous les produits en une seule requête par produit
+                $ids = array_keys($orderItems);
+                $products = Product::whereIn('id', $ids)->get();
+
+                foreach ($products as $product) {
+                    $quantity = $orderItems[$product->id] ?? 0;
+
+                    if ($product->stock >= $quantity) {
+                        // Décrément SQL unique
+                        Product::where('id', $product->id)
+                            ->update(['stock' => DB::raw("stock - {$quantity}")]);
+                    } else {
+                        Log::warning("Stock insuffisant pour le produit {$product->id}");
+                    }
+                }
+            });
+        } catch (\Throwable $e) {
+            Log::error("Erreur lors de la décrémentation du stock : " . $e->getMessage());
         }
     }
 }
