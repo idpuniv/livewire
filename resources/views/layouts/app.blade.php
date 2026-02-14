@@ -51,21 +51,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-    <!-- <script>
-document.addEventListener('DOMContentLoaded', function () {
 
-    if (!window.Echo) {
-        console.error('Echo not loaded yet');
-        return;
-    }
-
-    window.Echo.channel('products')
-        .listen('.product.updated', (e) => {
-            console.log('Produit mis à jour:', e.product);
-        });
-
-});
-</script> -->
 
 
     <!-- Livewire Scripts -->

@@ -4,7 +4,7 @@ use Livewire\Component;
 use Livewire\WithPagination;
 use App\Models\Product;
 
-new class extends Component {
+new class() extends Component {
     use WithPagination;
 
     public string $name = '';
@@ -162,6 +162,13 @@ new class extends Component {
 
         return ['products' => $query->latest()->paginate($this->perPage)];
     }
+
+    // Réinitialiser la sélection
+    public function resetSelection()
+    {
+        $this->selectedProducts = [];
+        $this->selectAll = false;
+    }
 };
 
 ?>
@@ -233,17 +240,47 @@ new class extends Component {
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
+                            <th class="py-3 px-4" width="50">
+                                <div class="form-check">
+                                    <input class="form-check-input"
+                                        wire:model.live="selectAll"
+                                        type="checkbox" id="selectAll">
+                                </div>
+                            </th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Nom</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Code</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Prix</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Stock</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Statut</th>
-                            <th class="py-3 px-4 fw-semibold text-dark border-bottom text-end">Actions</th>
+                            <th class="py-3 px-4 fw-semibold text-dark border-bottom text-end">
+                                <div class="d-flex justify-content-end">
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm p-0 border-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <li><a class="dropdown-item" href="#" wire:click.prevent="performBulkAction('publish')">Publier</a></li>
+                                            <li><a class="dropdown-item" href="#" wire:click.prevent="performBulkAction('unpublish')">Dépublier</a></li>
+                                            <li>
+                                                <hr class="dropdown-divider">
+                                            </li>
+                                            <li><a class="dropdown-item text-danger" href="#" wire:click.prevent="performBulkAction('delete')" wire:confirm="Supprimer les produits sélectionnés ?">Supprimer</a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($products as $product)
                         <tr wire:key="{{ $product->id }}">
+                            <td class="py-3 px-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                        wire:model.live="selectedProducts"
+                                        value="{{ $product->id }}">
+                                </div>
+                            </td>
                             <td class="py-3 px-4">{{ Str::limit($product->name,50) }}</td>
                             <td class="py-3 px-4">{{ $product->code }}</td>
                             <td class="py-3 px-4">{{ number_format($product->price,2) }} FCFA</td>
@@ -279,7 +316,7 @@ new class extends Component {
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-muted">
+                            <td colspan="7" class="text-center py-5 text-muted">
                                 <i class="bi bi-box-seam display-5 mb-3"></i>
                                 <h5 class="fw-semibold mb-2">Aucun produit trouvé</h5>
                                 <p>{{ $search ? 'Aucun résultat pour votre recherche.' : 'Commencez par créer votre premier produit.' }}</p>

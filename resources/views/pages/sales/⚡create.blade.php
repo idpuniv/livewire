@@ -47,7 +47,7 @@ new class() extends Component {
 
     public function handleProductUpdate($payload)
     {
-        \Log::info('Livewire: produit mis à jour', ['payload' => $payload]);
+        Log::info('Livewire: produit mis à jour', ['payload' => $payload]);
 
         $updatedProduct = $payload['product'] ?? null;
 

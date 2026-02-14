@@ -23,7 +23,6 @@ class Product extends Model
     protected static function booted()
     {
         static::updated(function ($product) {
-            // Log::info('broadcasted from model');
             broadcast(new ProductUpdated($product))->toOthers();
         });
     }

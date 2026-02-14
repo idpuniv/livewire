@@ -23,7 +23,6 @@ class ProductUpdated implements ShouldBroadcastNow
 
     public function broadcastOn(): Channel
     {
-        Log::info('broadcasted');
         return new Channel('products');
     }
 
