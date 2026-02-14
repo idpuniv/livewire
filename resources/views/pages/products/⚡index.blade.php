@@ -4,7 +4,7 @@ use Livewire\Component;
 use Livewire\WithPagination;
 use App\Models\Product;
 
-new class() extends Component {
+new class () extends Component {
     use WithPagination;
 
     public string $name = '';
@@ -34,17 +34,22 @@ new class() extends Component {
     public function updatedSearch()
     {
         $this->resetPage();
+        $this->selectedProducts = [];
+        $this->selectAll = false;
     }
+
     public function updatedFilterPublished()
     {
         $this->resetPage();
+        $this->selectedProducts = [];
+        $this->selectAll = false;
     }
 
     // Gestion de la sélection multiple
     public function updatedSelectAll($value)
     {
         if ($value) {
-            $this->selectedProducts = $this->products->pluck('id')->toArray();
+            $this->selectedProducts = $this->getProductsForCurrentPage()->pluck('id')->toArray();
         } else {
             $this->selectedProducts = [];
         }
@@ -52,30 +57,71 @@ new class() extends Component {
 
     public function updatedSelectedProducts()
     {
-        $this->selectAll = count($this->selectedProducts) === $this->products->count();
+        $currentPageProductIds = $this->getProductsForCurrentPage()->pluck('id')->toArray();
+        $selectedOnCurrentPage = array_intersect($this->selectedProducts, $currentPageProductIds);
+
+        $this->selectAll = !empty($selectedOnCurrentPage) &&
+                          count($selectedOnCurrentPage) === count($currentPageProductIds);
     }
 
-    // Action groupée
-    public function performBulkAction()
+    private function getProductsForCurrentPage()
     {
-        if (empty($this->selectedProducts) || empty($this->selectedBulkAction)) {
+        $query = Product::query();
+
+        if ($this->search) {
+            $query->where(function ($q) {
+                $q->where('name', 'like', "%{$this->search}%")
+                    ->orWhere('description', 'like', "%{$this->search}%");
+            });
+        }
+
+        if ($this->filterPublished !== '') {
+            if ($this->filterPublished) {
+                $query->whereNotNull('published_at');
+            } else {
+                $query->whereNull('published_at');
+            }
+        }
+
+        return $query->latest()->paginate($this->perPage);
+    }
+
+    // Action groupée SIMPLIFIÉE
+    // Action groupée
+    public function performBulkAction($action = null)
+    {
+        if ($action) {
+            $this->selectedBulkAction = $action;
+        }
+
+        if (empty($this->selectedProducts)) {
+            session()->flash('error', 'Veuillez sélectionner au moins un produit.');
+            return;
+        }
+
+        // DEBUG : afficher les IDs sélectionnés
+        session()->flash('info', 'IDs sélectionnés : ' . implode(', ', $this->selectedProducts));
+
+        if (empty($this->selectedBulkAction)) {
+            session()->flash('error', 'Veuillez choisir une action.');
             return;
         }
 
         $productIds = $this->selectedProducts;
+        $count = count($productIds);
 
         switch ($this->selectedBulkAction) {
             case 'publish':
-                Product::whereIn('id', $productIds)->update(['published_at' => now()]);
-                session()->flash('success', count($productIds) . ' produit(s) publié(s) !');
+                $updated = Product::whereIn('id', $productIds)->update(['published_at' => now()]);
+                session()->flash('success', $updated . ' produit(s) publié(s) !');
                 break;
             case 'unpublish':
-                Product::whereIn('id', $productIds)->update(['published_at' => null]);
-                session()->flash('success', count($productIds) . ' produit(s) dépublié(s) !');
+                $updated = Product::whereIn('id', $productIds)->update(['published_at' => null]);
+                session()->flash('success', $updated . ' produit(s) dépublié(s) !');
                 break;
             case 'delete':
-                Product::destroy($productIds);
-                session()->flash('success', count($productIds) . ' produit(s) supprimé(s) !');
+                $deleted = Product::whereIn('id', $productIds)->delete();
+                session()->flash('success', $deleted . ' produit(s) supprimé(s) !');
                 break;
         }
 
@@ -84,11 +130,12 @@ new class() extends Component {
         $this->selectedBulkAction = '';
     }
 
-    // Vider la sélection (panier)
+    // Vider la sélection
     public function clearSelection()
     {
         $this->selectedProducts = [];
         $this->selectAll = false;
+        session()->flash('success', 'Sélection effacée.');
     }
 
     public function openModal($id = null)
@@ -101,7 +148,7 @@ new class() extends Component {
                 $this->description = $product->description;
                 $this->price = $product->price;
                 $this->stock = $product->stock;
-                $this->published = (bool) $product->published_at;
+                $this->published = !is_null($product->published_at);
                 $this->editingProductId = $product->id;
             }
         } else {
@@ -143,38 +190,14 @@ new class() extends Component {
 
     public function with(): array
     {
-        $query = Product::query();
-
-        if ($this->search) {
-            $query->where(function ($q) {
-                $q->where('name', 'like', "%{$this->search}%")
-                    ->orWhere('description', 'like', "%{$this->search}%");
-            });
-        }
-
-        if ($this->filterPublished !== '') {
-            if ($this->filterPublished) {
-                $query->whereNotNull('published_at');
-            } else {
-                $query->whereNull('published_at');
-            }
-        }
-
-        return ['products' => $query->latest()->paginate($this->perPage)];
-    }
-
-    // Réinitialiser la sélection
-    public function resetSelection()
-    {
-        $this->selectedProducts = [];
-        $this->selectAll = false;
+        return ['products' => $this->getProductsForCurrentPage()];
     }
 };
 
 ?>
 
 <div class="container py-4">
-    <!-- Flash Message -->
+    <!-- Flash Messages -->
     @if(session('success'))
     <div class="alert alert-success alert-dismissible fade show shadow-sm border-0" role="alert">
         <div class="d-flex align-items-center">
@@ -185,6 +208,15 @@ new class() extends Component {
     </div>
     @endif
 
+    @if(session('error'))
+    <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+            <div class="flex-grow-1">{{ session('error') }}</div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    </div>
+    @endif
 
     <!-- Header -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
@@ -224,7 +256,7 @@ new class() extends Component {
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <button class="btn btn-outline-secondary w-100"
-                        wire:click="$set(['search'=>'','filterPublished'=>''])">
+                        wire:click="$set('search', ''); $set('filterPublished', '')">
                         <i class="bi bi-arrow-clockwise me-1"></i>
                         Réinitialiser
                     </button>
@@ -243,15 +275,18 @@ new class() extends Component {
                             <th class="py-3 px-4" width="50">
                                 <div class="form-check">
                                     <input class="form-check-input"
+                                        type="checkbox" 
                                         wire:model.live="selectAll"
-                                        type="checkbox" id="selectAll">
+                                        id="selectAll">
                                 </div>
                             </th>
+                            
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Nom</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Code</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Prix</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Stock</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Statut</th>
+                            <th class="py-3 px-4 fw-semibold text-dark border-bottom text-end">Actions</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom text-end">
                                 <div class="d-flex justify-content-end">
                                     <div class="dropdown">
@@ -259,12 +294,25 @@ new class() extends Component {
                                             <i class="bi bi-three-dots-vertical"></i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end">
-                                            <li><a class="dropdown-item" href="#" wire:click.prevent="performBulkAction('publish')">Publier</a></li>
-                                            <li><a class="dropdown-item" href="#" wire:click.prevent="performBulkAction('unpublish')">Dépublier</a></li>
+                                            <li>
+                                                <button class="dropdown-item" wire:click="performBulkAction('publish')">
+                                                    Publier
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button class="dropdown-item" wire:click="performBulkAction('unpublish')">
+                                                    Dépublier
+                                                </button>
+                                            </li>
                                             <li>
                                                 <hr class="dropdown-divider">
                                             </li>
-                                            <li><a class="dropdown-item text-danger" href="#" wire:click.prevent="performBulkAction('delete')" wire:confirm="Supprimer les produits sélectionnés ?">Supprimer</a></li>
+                                            <li>
+                                                <button class="dropdown-item text-danger" wire:click="performBulkAction('delete')" 
+                                                    wire:confirm="Êtes-vous sûr de vouloir supprimer les produits sélectionnés ?">
+                                                    Supprimer
+                                                </button>
+                                            </li>
                                         </ul>
                                     </div>
                                 </div>
@@ -273,17 +321,20 @@ new class() extends Component {
                     </thead>
                     <tbody>
                         @forelse($products as $product)
-                        <tr wire:key="{{ $product->id }}">
+                        <tr wire:key="{{ $product->id }}" class="{{ in_array($product->id, $selectedProducts) ? 'table-primary' : '' }}">
                             <td class="py-3 px-4">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox"
+                                    <input class="form-check-input" 
+                                        type="checkbox"
+                                        value="{{ $product->id }}"
                                         wire:model.live="selectedProducts"
-                                        value="{{ $product->id }}">
+                                        wire:key="checkbox-{{ $product->id }}">
                                 </div>
                             </td>
-                            <td class="py-3 px-4">{{ Str::limit($product->name,50) }}</td>
+
+                            <td class="py-3 px-4">{{ Str::limit($product->name, 50) }}</td>
                             <td class="py-3 px-4">{{ $product->code }}</td>
-                            <td class="py-3 px-4">{{ number_format($product->price,2) }} FCFA</td>
+                            <td class="py-3 px-4">{{ number_format($product->price, 0, ',', ' ') }} FCFA</td>
                             <td class="py-3 px-4">{{ $product->stock }}</td>
                             <td class="py-3 px-4">
                                 @if($product->published_at)
@@ -307,16 +358,17 @@ new class() extends Component {
                                     </button>
                                     <button class="btn btn-outline-danger btn-sm d-flex align-items-center"
                                         wire:click="delete({{ $product->id }})"
-                                        wire:confirm="Êtes-vous sûr ?">
+                                        wire:confirm="Êtes-vous sûr de vouloir supprimer ce produit ?">
                                         <i class="bi bi-trash me-1"></i>
                                         Supprimer
                                     </button>
                                 </div>
                             </td>
+                            <td class="py-3 px-4 text-end"></td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="7" class="text-center py-5 text-muted">
+                            <td colspan="8" class="text-center py-5 text-muted">
                                 <i class="bi bi-box-seam display-5 mb-3"></i>
                                 <h5 class="fw-semibold mb-2">Aucun produit trouvé</h5>
                                 <p>{{ $search ? 'Aucun résultat pour votre recherche.' : 'Commencez par créer votre premier produit.' }}</p>
@@ -328,11 +380,69 @@ new class() extends Component {
             </div>
         </div>
 
-        @if($products->hasPages())
-        <div class="card-footer bg-white border-top-0 pt-3">
-            {{ $products->links() }}
+   @if($products->hasPages())
+<div class="card-footer bg-white border-top-0 pt-3">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="text-muted small">
+            Affichage de {{ $products->firstItem() }} à {{ $products->lastItem() }} sur {{ $products->total() }} produits
         </div>
-        @endif
+        
+        <nav aria-label="Pagination">
+            <ul class="pagination my-0" style="gap: 2px;">
+                {{-- Previous --}}
+                <li class="page-item {{ $products->onFirstPage() ? 'disabled' : '' }}">
+                    <a class="page-link" href="#" wire:click.prevent="previousPage" rel="prev" style="border-radius: 4px;">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+
+                {{-- Pages --}}
+                @foreach ($products->getUrlRange(1, $products->lastPage()) as $page => $url)
+                    <li class="page-item {{ $page == $products->currentPage() ? 'active' : '' }}">
+                        <a class="page-link" href="#" wire:click.prevent="gotoPage({{ $page }})" style="border-radius: 4px;">
+                            {{ $page }}
+                        </a>
+                    </li>
+                @endforeach
+
+                {{-- Next --}}
+                <li class="page-item {{ !$products->hasMorePages() ? 'disabled' : '' }}">
+                    <a class="page-link" href="#" wire:click.prevent="nextPage" rel="next" style="border-radius: 4px;">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<style>
+.pagination .page-link {
+    border: none;
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    color: #6c757d;
+    background: transparent;
+}
+.pagination .page-link:hover {
+    background-color: #f8f9fa;
+    color: #0d6efd;
+}
+.pagination .active .page-link {
+    background-color: rgba(13, 110, 253, 0.1);
+    color: #0d6efd;
+    font-weight: 500;
+}
+.pagination .page-link:focus {
+    box-shadow: none;
+    outline: none;
+}
+.pagination .disabled .page-link {
+    color: #adb5bd;
+    pointer-events: none;
+}
+</style>
+@endif
     </div>
 
     <!-- Modal Produit -->
