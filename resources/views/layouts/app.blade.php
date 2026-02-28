@@ -34,7 +34,7 @@
 
 <body class="bg-light">
 
-    <div class="container">
+    <div class="px-0 px-md-3">
         <!-- Messages de succès -->
         @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show" role="alert">

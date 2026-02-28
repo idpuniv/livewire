@@ -153,7 +153,7 @@ new class() extends Component {
 
 <div class="card border-0 shadow-sm rounded-10 h-100">
     {{-- Header --}}
-    <div class="card-header bg-white border-0 pt-4 px-4">
+    <div class="card-header d-none bg-white border-0 pt-4 px-4">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-semibold">
                 <i class="fas fa-credit-card me-2 text-primary"></i>
@@ -206,7 +206,7 @@ new class() extends Component {
                 <span class="input-group-text bg-light border-0 text-secondary">XOF</span>
             </div>
             {{-- Hauteur fixe pour éviter le repositionnement --}}
-            <div class="mt-2 small" style="height: 24px;">
+            <div class="mt-2 small" style="height: 20px;">
                 @if($amountPaid > 0)
                 <span class="{{ $amountPaid >= ($order?->invoice?->total ?? 0) ? 'text-success' : 'text-danger' }}">
                     <i class="fas fa-{{ $amountPaid >= ($order?->invoice?->total ?? 0) ? 'check-circle' : 'exclamation-circle' }} me-1"></i>
@@ -225,7 +225,7 @@ new class() extends Component {
         </div>
 
         {{-- Zone à hauteur fixe pour l'icône de statut --}}
-        <div style="height: 120px; position: relative;">
+        <div class="d-none d-md-block" style="height: 120px; position: relative;">
             @if($paymentStatus)
             <div id="payment-status-icon" class="position-absolute start-50 translate-middle-x" style="top: 30px;">
                 <div class="position-relative">

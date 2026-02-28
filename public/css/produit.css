@@ -46,3 +46,16 @@ input[type=number] {
     -moz-appearance: textfield; /* Firefox */
     appearance: textfield;
 }
+
+
+/* Pour arrondir uniquement le haut de l'offcanvas */
+.offcanvas-bottom.offcanvas-sm {
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+}
+
+/* Optionnel : arrondir aussi le header pour un meilleur rendu */
+.offcanvas-bottom.offcanvas-sm .offcanvas-header {
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+}

@@ -126,6 +126,9 @@ new class () extends Component {
         if ($this->cart) {
             CartItem::where('cart_id', $this->cart->id)->delete();
         }
+        if($this->order) {
+            $this->order = null;
+        }
     }
 
 
@@ -528,8 +531,8 @@ new class () extends Component {
 
 <div class="app-container">
 
-    <div class="main-layout">
-        <main class="main-section layout">
+    <div class="main-layout mb-5 mb-md-0">
+        <main class="main-section layout mb-2 mb-md-0">
             <div class="section-card h-100">
 
                 <!-- Header -->
@@ -839,7 +842,7 @@ new class () extends Component {
                 <div class="bg-success bg-opacity-10 rounded-circle p-4 mb-3">
                     <i class="fas fa-check text-success fa-3x"></i>
                 </div>
-                <h5 class="fw-bold text-success mb-1">Paiement réussi !</h5>
+                <!-- Le titre "Paiement réussi !" a été supprimé car déjà dans l'en-tête -->
                 <p class="text-muted mb-2">Commande #{{ $order->id }}</p>
                 <p class="fw-bold text-dark fs-4 mb-3">{{ number_format($order->amount_paid ?? $order->invoice?->total ?? 0, 2) }}</p>
                 <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="offcanvas">
@@ -859,36 +862,50 @@ new class () extends Component {
 
 @script
 <script>
+    let offcanvasInstance = null;
+
+    // Initialiser l'offcanvas une seule fois
+    document.addEventListener('livewire:init', () => {
+        const offcanvasEl = document.getElementById('offcanvasPay');
+        if (offcanvasEl) {
+            offcanvasInstance = new bootstrap.Offcanvas(offcanvasEl);
+            
+            // Nettoyer l'overlay quand l'offcanvas est caché
+            offcanvasEl.addEventListener('hidden.bs.offcanvas', function () {
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                const backdrop = document.querySelector('.offcanvas-backdrop');
+                if (backdrop) backdrop.remove();
+            });
+        }
+    });
+
     $wire.on('open-pay-offcanvas', () => {
-        let offcanvas = document.getElementById('offcanvasPay');
-        if (offcanvas) {
-            let bsOffcanvas = new bootstrap.Offcanvas(offcanvas);
-            bsOffcanvas.show();
+        if (offcanvasInstance) {
+            // Fermer toute instance existante
+            offcanvasInstance.hide();
+            // Petite pause pour permettre la fermeture
+            setTimeout(() => {
+                offcanvasInstance.show();
+            }, 150);
         }
     });
 
-    // Sélectionner ton offcanvas
-    const offcanvasEl = document.getElementById('offcanvasPay');
-    const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-
-    // Écouter le redimensionnement
+    // Gérer le redimensionnement
     window.addEventListener('resize', () => {
-        if (window.innerWidth >= 992) { // lg et plus
-            bsOffcanvas.hide();
+        if (window.innerWidth >= 992 && offcanvasInstance) {
+            offcanvasInstance.hide();
+        }
+    });
+
+    // Nettoyer quand le composant est démonté
+    $wire.$on('livewire:navigated', () => {
+        if (offcanvasInstance) {
+            offcanvasInstance.hide();
+            offcanvasInstance.dispose();
+            offcanvasInstance = null;
         }
     });
 </script>
-
-
-<script>
-    $wire.on('console-log', (data) => {
-        console.log('Livewire a reçu:', data);
-    });
-
-    // Pour vérifier que Livewire est bien prêt
-    console.log('Livewire composant chargé');
-</script>
-
-
-
 @endscript
