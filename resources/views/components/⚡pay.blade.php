@@ -4,32 +4,44 @@ use App\Enums\Status;
 use Livewire\Component;
 use App\Models\Order;
 use App\Models\Cart;
-use App\Models\Payment;
-use App\Models\Transaction;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use App\Events\PaymentCompleted;
+use App\Services\PaymentService;
+use App\Services\CheckoutService;
+use Illuminate\Support\Facades\Log;
 
 new class() extends Component {
     public ?Order $order = null;
+    public ?Cart $cart = null;
 
     public $amountPaid = 0;
     public float $change = 0;
     public string $paymentMethod = 'cash';
-    public ?Cart $cart = null;
+    public float $total = 0;
     
     public ?string $paymentStatus = null;
+
+    protected PaymentService $paymentService;
+    protected CheckoutService $checkoutService;
+
+    public function boot(
+        PaymentService $paymentService,
+        CheckoutService $checkoutService
+    ) {
+        $this->paymentService = $paymentService;
+        $this->checkoutService = $checkoutService;
+    }
 
     protected $listeners = [
         'refreshPay' => 'refreshPay',
         'loadOrder'  => 'loadOrder',
         'cartUpdated' => 'refreshCart',
-        'resetPaymentStatus' => 'resetPaymentStatus'
+        'resetPaymentStatus' => 'resetPaymentStatus',
+        'orderCreated' => 'handleOrderCreated'
     ];
 
-    public function mount(?Order $order = null): void
+    public function mount(?Order $order = null, ?Cart $cart = null): void
     {
         $this->order = $order;
+        $this->cart = $cart;
         $this->syncAmounts();
     }
 
@@ -47,13 +59,27 @@ new class() extends Component {
 
     public function refreshCart($cartId)
     {
-        $this->cart = Cart::find($cartId);
+        $this->cart = Cart::with(['items'])->find($cartId);
+        $this->order = null;
+        $this->syncAmounts();
     }
 
     public function loadOrder(int $orderId): void
     {
         $this->order = Order::with(['items', 'invoice'])->find($orderId);
+        $this->cart = null;
         $this->syncAmounts();
+    }
+
+    public function handleOrderCreated($orderId, $amountPaid)
+    {
+        Log::info('handleOrderCreated appelé', ['orderId' => $orderId, 'amountPaid' => $amountPaid]);
+        
+        $this->order = Order::with(['items', 'invoice'])->find($orderId);
+        $this->amountPaid = $amountPaid;
+        $this->syncAmounts();
+        
+        $this->processPayment();
     }
 
     public function updatedAmountPaid(): void
@@ -63,82 +89,125 @@ new class() extends Component {
 
     private function syncAmounts(): void
     {
-        $total = $this->order?->invoice?->total ?? 0;
-        $this->amountPaid = $total;
-        $this->change = 0;
+        if ($this->order) {
+            $this->total = $this->order->invoice?->total ?? 0;
+        } elseif ($this->cart) {
+            $this->total = $this->cart->total ?? 0;
+        } else {
+            $this->total = 0;
+        }
+        
+        $this->calculateChange();
     }
 
     private function calculateChange(): void
     {
-        $total = floatval($this->order?->invoice?->total ?? 0);
-        $amountPaid = floatval($this->amountPaid ?? 0);
-        $this->change = max($amountPaid - $total, 0);
+        $this->change = $this->paymentService->calculateChange(
+            floatval($this->amountPaid ?? 0),
+            $this->total
+        );
+    }
+
+    public function getCanPayProperty()
+    {
+        // Cas 1 : Commande existante
+        if ($this->order) {
+            if (!$this->order->invoice) {
+                return false;
+            }
+            if ($this->paymentMethod === 'cash') {
+                return $this->amountPaid >= $this->total;
+            }
+            return true;
+        }
+        
+        // Cas 2 : Panier avec articles
+        if ($this->cart && $this->cart->items()->count() > 0) {
+            if ($this->paymentMethod === 'cash') {
+                return $this->amountPaid >= $this->total;
+            }
+            return true;
+        }
+
+        return false;
     }
 
     public function pay(): void
+    {
+        // Cas 1 : Paiement d'une commande existante
+        if ($this->order) {
+            $this->processPayment();
+            return;
+        }
+
+        // Cas 2 : Création + Paiement d'un panier
+        if ($this->cart) {
+            if ($this->cart->items()->count() === 0) {
+                session()->flash('error', 'Le panier est vide.');
+                return;
+            }
+
+            if ($this->paymentMethod === 'cash' && $this->amountPaid < $this->total) {
+                session()->flash('error', 'Montant insuffisant.');
+                return;
+            }
+
+            // Utiliser CheckoutService pour créer ET payer en une transaction
+            $result = $this->checkoutService->createOrderAndPay(
+                $this->cart,
+                floatval($this->amountPaid ?? 0),
+                $this->paymentMethod
+            );
+
+            if ($result['success']) {
+                $this->paymentStatus = 'success';
+                
+                $this->dispatch('clearCart2');
+                $this->order = null;
+                $this->cart = null;
+                $this->syncAmounts();
+
+                session()->flash('success', $result['message']);
+                $this->dispatch('startTimer');
+                
+            } else {
+                $this->paymentStatus = 'error';
+                session()->flash('error', $result['message']);
+                $this->dispatch('startTimer');
+            }
+            
+            return;
+        }
+
+        session()->flash('error', 'Aucune commande ou panier à traiter.');
+    }
+
+    public function processPayment(): void
     {
         if (!$this->order || !$this->order->invoice) {
             session()->flash('error', 'Aucune commande à payer.');
             return;
         }
 
-        $total = $this->order->invoice->total;
+        $result = $this->paymentService->processPayment(
+            $this->order,
+            floatval($this->amountPaid ?? 0),
+            $this->paymentMethod
+        );
 
-        if ($this->paymentMethod === 'cash' && $this->amountPaid < $total) {
-            session()->flash('error', 'Montant insuffisant.');
-            return;
-        }
-
-        try {
-            DB::beginTransaction();
-
-            $payment = Payment::create([
-                'order_id'  => $this->order->id,
-                'user_id'   => Auth::id(),
-                'method'    => $this->paymentMethod,
-                'amount'    => $total,
-                'status'    => Status::SUCCESS,
-            ]);
-
-            Transaction::create([
-                'payment_id'       => $payment->id,
-                'transaction_type' => 'payment',
-                'amount'           => $total,
-                'status'           => Status::SUCCESS,
-            ]);
-
-            $this->order->update([
-                'status'       => Status::CONFIRMED,
-                'amount_paid'  => $total,
-            ]);
-
-            $this->order->invoice->update([
-                'status' => Status::PAID,
-            ]);
-
-            DB::commit();
-            event(new PaymentCompleted($payment));
-            
+        if ($result['success']) {
             $this->paymentStatus = 'success';
             
-            $this->order = Order::with(['items', 'invoice'])->find($this->order->id);
             $this->dispatch('clearCart2');
             $this->order = null;
             $this->syncAmounts();
 
-            session()->flash('success', 'Paiement effectué avec succès.');
-            
-            // Déclencher le timer pour cacher l'icône
+            session()->flash('success', $result['message']);
             $this->dispatch('startTimer');
             
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            report($e);
-            
+        } else {
             $this->paymentStatus = 'error';
-            session()->flash('error', 'Erreur lors du paiement.');
-            
-            // Déclencher le timer pour cacher l'icône
+            session()->flash('error', $result['message']);
             $this->dispatch('startTimer');
         }
     }
@@ -173,7 +242,7 @@ new class() extends Component {
         <div class="mb-4">
             <div class="d-flex justify-content-between mb-2">
                 <span class="text-secondary">Sous-total</span>
-                <span class="fw-medium">{{ number_format($order?->invoice?->subtotal ?? $cart->subtotal ?? 0, 2) }} XOF</span>
+                <span class="fw-medium">{{ number_format($order?->invoice?->subtotal ?? $cart?->subtotal ?? 0, 2) }} XOF</span>
             </div>
             <div class="d-flex justify-content-between">
                 <span class="text-secondary">TVA (20%)</span>
@@ -185,10 +254,10 @@ new class() extends Component {
         <div class="bg-light rounded-3 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center">
                 <span class="fw-semibold">Total à payer</span>
-                <span class="h4 mb-0 text-primary fw-bold">{{ number_format($order?->invoice?->total ?? $cart?->total ?? 0, 2) }} XOF</span>
+                <span class="h4 mb-0 text-primary fw-bold">{{ number_format($total, 2) }} XOF</span>
             </div>
             <small class="text-secondary d-block mt-1">
-                {{ $order?->items?->count() ?? $cart->items?->count() ?? 0 }} articles •
+                {{ $order?->items?->count() ?? $cart?->items?->count() ?? 0 }} articles •
                 {{ $order?->items?->sum('quantity') ?? $cart?->items?->sum('quantity') ?? 0 }} unités
             </small>
         </div>
@@ -208,9 +277,9 @@ new class() extends Component {
             {{-- Hauteur fixe pour éviter le repositionnement --}}
             <div class="mt-2 small" style="height: 20px;">
                 @if($amountPaid > 0)
-                <span class="{{ $amountPaid >= ($order?->invoice?->total ?? 0) ? 'text-success' : 'text-danger' }}">
-                    <i class="fas fa-{{ $amountPaid >= ($order?->invoice?->total ?? 0) ? 'check-circle' : 'exclamation-circle' }} me-1"></i>
-                    {{ $amountPaid >= ($order?->invoice?->total ?? 0) ? 'Montant suffisant' : 'Montant insuffisant' }}
+                <span class="{{ $amountPaid >= $total ? 'text-success' : 'text-danger' }}">
+                    <i class="fas fa-{{ $amountPaid >= $total ? 'check-circle' : 'exclamation-circle' }} me-1"></i>
+                    {{ $amountPaid >= $total ? 'Montant suffisant' : 'Montant insuffisant' }}
                 </span>
                 @endif
             </div>
@@ -227,7 +296,7 @@ new class() extends Component {
         {{-- Zone à hauteur fixe pour l'icône de statut --}}
         <div class="d-none d-md-block" style="height: 120px; position: relative;">
             @if($paymentStatus)
-            <div id="payment-status-icon" class="position-absolute start-50 translate-middle-x" style="top: 30px;">
+            <div id="payment-status-icon" class="position-absolute start-50 translate-middle-x" style="top: 150px;">
                 <div class="position-relative">
                     {{-- Halo/auréole --}}
                     <div class="position-absolute top-50 start-50 translate-middle 
@@ -258,11 +327,15 @@ new class() extends Component {
     <div class="card-footer bg-white border-0 pb-4 px-4">
         <button
             type="button"
-            @if(!$order) disabled @endif
-            class="btn btn-primary w-100 py-3 fw-medium"
+            @if(!$this->canPay) disabled @endif
+            class="btn btn-primary w-100 py-3 fw-medium {{ !$this->canPay ? 'opacity-50' : '' }}"
             wire:click="pay">
             <i class="fas fa-check me-2"></i>
-            Confirmer le paiement
+            @if($order)
+                Confirmer le paiement
+            @else
+                Créer et payer
+            @endif
         </button>
     </div>
 </div>
@@ -272,10 +345,7 @@ document.addEventListener('livewire:init', function() {
     let timer;
     
     Livewire.on('startTimer', function() {
-        // Effacer le timer précédent s'il existe
         if (timer) clearTimeout(timer);
-        
-        // Démarrer un nouveau timer pour cacher l'icône après 3 secondes
         timer = setTimeout(function() {
             Livewire.dispatch('resetPaymentStatus');
         }, 3000);

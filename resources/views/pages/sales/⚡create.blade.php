@@ -3,13 +3,10 @@
 use Livewire\Component;
 use App\Models\Cart;
 use App\Models\Order;
-use App\Models\OrderItem;
-use App\Models\Invoice;
-use App\Models\InvoiceItem;
-use App\Models\CartItem;
-use App\Models\Checkout;
 use App\Models\Product;
-use Illuminate\Support\Facades\DB;
+use App\Services\ProductService;
+use App\Services\CartService;
+use App\Services\OrderService;
 use Illuminate\Support\Facades\Auth;
 use App\Enums\Status;
 use Illuminate\Support\Facades\Log;
@@ -23,6 +20,21 @@ new class () extends Component {
     public bool $showQuantityModal = false;
     public $editingProductId = null;
     public $editingQuantity = 1;
+
+    protected ProductService $productService;
+    protected CartService $cartService;
+    protected OrderService $orderService;
+
+    public function boot(
+        ProductService $productService,
+        CartService $cartService,
+        OrderService $orderService
+    ) {
+        $this->productService = $productService;
+        $this->cartService = $cartService;
+        $this->orderService = $orderService;
+    }
+
     protected $listeners = [
         'clearCart2' => 'clearCart2',
         'refreshPay' => '$refresh',
@@ -30,13 +42,6 @@ new class () extends Component {
         'echo:products,.product.updated' => 'handleProductUpdate',
         'echo:payments,.payment.completed' => 'handleProductUpdate'
     ];
-
-    //     protected function getListeners()
-    // {
-    //     return [
-    //         'echo:products,.product.updated' => 'handleProductUpdate'
-    //     ];
-    // }
 
     public function mount()
     {
@@ -49,71 +54,18 @@ new class () extends Component {
     public function handleProductUpdate($payload)
     {
         Log::info('handleProductUpdate called', ['payload' => $payload]);
-
-        // Recharge tous les produits
         $this->loadProducts();
-
-        // force le rafraîchissement
         $this->dispatch('$refresh');
     }
 
-
-
-
     public function loadProducts()
     {
-        $dbProducts = Product::all()->toArray();
-
-        if (empty($dbProducts)) {
-            $this->createTestProducts();
-        } else {
-            $this->products = array_map(function ($product) {
-                return [
-                    'id' => $product['id'],
-                    'name' => $product['name'],
-                    'code' => $product['code'] ?? '',
-                    'price' => floatval($product['price']),
-                    'stock' => intval($product['stock'] ?? 0),
-                    'image' => $product['image'] ?? '',
-                    'selected' => false,
-                    'quantity' => 0
-                ];
-            }, $dbProducts);
-        }
-    }
-
-    protected function createTestProducts()
-    {
-        $testProducts = [
-            ['name' => 'Lait 1L UHT entier', 'code' => '001', 'price' => 800,  'stock' => 50, 'image' => ''],
-            ['name' => 'Pain de campagne', 'code' => '002', 'price' => 700,  'stock' => 30, 'image' => 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&w=400&q=80'],
-            ['name' => "Jus d'orange pressé 1L", 'code' => '003', 'price' => 1500, 'stock' => 25, 'image' => 'https://images.unsplash.com/photo-1629626720165-c408e98b4e70?auto=format&fit=crop&w=400&q=80'],
-            ['name' => 'Pâtes spaghetti 500g', 'code' => '004', 'price' => 1000, 'stock' => 40, 'image' => 'https://images.unsplash.com/photo-1621996346565-e3dbc353d2e5?auto=format&fit=crop&w=400&q=80'],
-            ['name' => 'Steak haché 15% MG', 'code' => '005', 'price' => 3200, 'stock' => 20, 'image' => 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=400&q=80'],
-            ['name' => 'Tomates bio 1kg', 'code' => '006', 'price' => 2100, 'stock' => 35, 'image' => 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=400&q=80'],
-        ];
-
-        foreach ($testProducts as $index => $productData) {
-            $product = Product::create($productData);
-            $this->products[] = [
-                'id' => $product->id,
-                'name' => $product->name,
-                'code' => $product->code,
-                'price' => floatval($product->price),
-                'stock' => intval($product->stock),
-                'image' => $product->image,
-                'selected' => false,
-                'quantity' => 0
-            ];
-        }
+        $this->products = $this->productService->getAllProducts();
     }
 
     public function createCart()
     {
-        $this->cart = Cart::firstOrCreate([
-            'user_id' => Auth::id() ?? 1,
-            'status' => 'pending'
-        ]);
+        $this->cart = $this->cartService->getOrCreateCart();
     }
 
     public function clearCart2()
@@ -124,13 +76,12 @@ new class () extends Component {
         }
 
         if ($this->cart) {
-            CartItem::where('cart_id', $this->cart->id)->delete();
+            $this->cartService->clearCart($this->cart);
         }
-        if($this->order) {
+        if ($this->order) {
             $this->order = null;
         }
     }
-
 
     protected function syncCartItems()
     {
@@ -138,16 +89,7 @@ new class () extends Component {
             return;
         }
 
-        $items = $this->cart->items()->with('product')->get();
-
-        foreach ($this->products as &$p) {
-            $cartItem = $items->firstWhere('product_id', $p['id']);
-            if ($cartItem) {
-                $p['selected'] = true;
-                $p['quantity'] = $cartItem->quantity;
-            }
-        }
-
+        $this->cartService->syncCartItems($this->cart, $this->products);
         $this->dispatch('cartUpdated', cartId: $this->cart->id);
     }
 
@@ -159,113 +101,29 @@ new class () extends Component {
         }
 
         try {
-            $checkoutId = DB::transaction(function () {
-                $subtotal = $this->cart->subtotal;
-                $tax = $this->cart->tax;
-                $total = $this->cart->total;
+            $this->order = $this->orderService->createOrderFromCart($this->cart);
+            
+            $this->createCart(); // Nouveau panier
+            
+            $this->dispatch('refreshPay');
+            $this->dispatch('open-pay-offcanvas');
 
-                $checkout = Checkout::create([
-                    'cart_id' => $this->cart->id,
-                    'user_id' => Auth::id() ?? 1,
-                    'amount' => $total,
-                    'status' => 'pending'
-                ]);
+            session()->flash('success', 'Commande #' . $this->order->id);
 
-                $invoice = Invoice::create([
-                    'checkout_id' => $checkout->id,
-                    'subtotal' => $subtotal,
-                    'tax' => $tax,
-                    'total' => $total,
-                    'status' => 'pending'
-                ]);
-
-                $this->order = Order::create([
-                    'checkout_id' => $checkout->id,
-                    'status' => 'pending',
-                    'amount_paid' => 0,
-                    'invoice_id' => $invoice->id
-                ]);
-
-                $orderItemsData = [];
-                $invoiceItemsData = [];
-                $stockUpdates = [];
-
-                foreach ($this->cart->items as $item) {
-                    $product = $item->product;
-                    $productTotal = $item->quantity * $item->price;
-                    $productTax = $productTotal * 0.20;
-
-                    $orderItemsData[] = [
-                        'order_id' => $this->order->id,
-                        'product_id' => $product->id,
-                        'product_name' => $product->name,
-                        'product_code' => $product->code,
-                        'unit_price' => $item->price,
-                        'quantity' => $item->quantity,
-                        'total_price' => $productTotal,
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ];
-
-                    $invoiceItemsData[] = [
-                        'invoice_id' => $invoice->id,
-                        'product_id' => $product->id,
-                        'product_name' => $product->name,
-                        'product_code' => $product->code,
-                        'unit_price' => $item->price,
-                        'quantity' => $item->quantity,
-                        'total_price' => $productTotal,
-                        'tax_rate' => 20.00,
-                        'tax_amount' => $productTax,
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ];
-
-                    // $stockUpdates[$product->id] = $item->quantity;
-                }
-
-                if (!empty($orderItemsData)) {
-                    OrderItem::insert($orderItemsData);
-                }
-                if (!empty($invoiceItemsData)) {
-                    InvoiceItem::insert($invoiceItemsData);
-                }
-
-                foreach ($stockUpdates as $productId => $quantity) {
-                    Product::where('id', $productId)->decrement('stock', $quantity);
-                }
-
-                $this->cart->delete();
-                $this->createCart();
-
-                $this->dispatch('refreshPay');
-                $this->dispatch('open-pay-offcanvas');
-
-                session()->flash('success', 'Commande #' . $this->order->id);
-
-                return $this->order->id;
-            });
-
-            return $checkoutId;
+            return $this->order->id;
+            
         } catch (\Exception $e) {
             session()->flash('error', 'Erreur: ' . $e->getMessage());
+            Log::error('Erreur création commande: ' . $e->getMessage());
             return null;
         }
     }
 
+    
+
     public function getFilteredProductsProperty()
     {
-        if (!$this->search) {
-            return $this->products;
-        }
-
-        $search = strtolower($this->search);
-        return array_filter(
-            $this->products,
-            fn ($p) =>
-            str_contains(strtolower($p['name']), $search) ||
-                str_contains(strtolower($p['code']), $search)
-        );
+        return $this->productService->filterProducts($this->products, $this->search);
     }
 
     public function openQuantityModal($productId)
@@ -308,25 +166,14 @@ new class () extends Component {
                         $p['selected'] = true;
 
                         if ($this->cart) {
-                            $item = CartItem::updateOrCreate(
-                                [
-                                    'cart_id' => $this->cart->id,
-                                    'product_id' => $productId
-                                ],
-                                [
-                                    'quantity' => $newQuantity,
-                                    'price' => $p['price']
-                                ]
-                            );
+                            $this->cartService->addToCart($this->cart, $p, $productId);
                         }
                     } else {
                         $p['quantity'] = 0;
                         $p['selected'] = false;
 
                         if ($this->cart) {
-                            CartItem::where('cart_id', $this->cart->id)
-                                ->where('product_id', $productId)
-                                ->delete();
+                            $this->cartService->removeFromCart($this->cart, $productId);
                         }
                     }
                     break;
@@ -368,61 +215,10 @@ new class () extends Component {
 
         try {
             if ($this->order) {
-                $item = OrderItem::firstOrCreate(
-                    [
-                        'order_id' => $this->order->id,
-                        'product_id' => $productId
-                    ],
-                    [
-                        'product_name' => $product['name'],
-                        'product_code' => $product['code'],
-                        'unit_price' => $product['price'],
-                        'quantity' => 0,
-                        'total_price' => 0,
-                    ]
-                );
-
-                $item->quantity += 1;
-                $item->total_price = $item->quantity * $item->unit_price;
-                $item->save();
+                $this->orderService->updateOrderWithExistingCart($this->order, $product, $productId);
                 $this->dispatch('refreshPay')->to('pay');
-
-                if ($this->order->invoice) {
-                    $invoiceItem = InvoiceItem::firstOrCreate(
-                        [
-                            'invoice_id' => $this->order->invoice->id,
-                            'product_id' => $productId
-                        ],
-                        [
-                            'product_name' => $product['name'],
-                            'product_code' => $product['code'],
-                            'unit_price' => $product['price'],
-                            'quantity' => 0,
-                            'total_price' => 0,
-                            'tax_rate' => 20.0,
-                            'tax_amount' => 0,
-                        ]
-                    );
-
-                    $invoiceItem->quantity += 1;
-                    $invoiceItem->total_price = $invoiceItem->quantity * $invoiceItem->unit_price;
-                    $invoiceItem->tax_amount = $invoiceItem->total_price * ($invoiceItem->tax_rate / 100);
-                    $invoiceItem->save();
-                }
             } else {
-                $item = CartItem::firstOrCreate(
-                    [
-                        'cart_id' => $this->cart->id,
-                        'product_id' => $productId
-                    ],
-                    [
-                        'quantity' => 0,
-                        'price' => $product['price']
-                    ]
-                );
-
-                $item->quantity += 1;
-                $item->save();
+                $this->cartService->incrementQuantity($this->cart, $productId, $product['price']);
                 $this->dispatch('cartUpdated', cartId: $this->cart->id);
             }
         } catch (\Exception $e) {
@@ -453,33 +249,24 @@ new class () extends Component {
         }
 
         if ($this->cart) {
-            $item = CartItem::where('cart_id', $this->cart->id)
-                ->where('product_id', $productId)
-                ->first();
-            if ($item) {
-                $item->quantity -= 1;
-                if ($item->quantity <= 0) {
-                    $item->delete();
-                } else {
-                    $item->save();
-                }
-            }
+            $this->cartService->decrementQuantity($this->cart, $productId);
         }
     }
 
     public function clearCart()
     {
-        if ($this->order && $this->order === Status::PENDING) {
+        if ($this->order && $this->order->status === Status::PENDING) {
             $this->order->delete();
             $this->order = null;
         }
+        
         foreach ($this->products as &$p) {
             $p['quantity'] = 0;
             $p['selected'] = false;
         }
 
         if ($this->cart) {
-            CartItem::where('cart_id', $this->cart->id)->delete();
+            $this->cartService->clearCart($this->cart);
             $this->order = null;
         }
         $this->dispatch('refreshPay');
@@ -492,37 +279,17 @@ new class () extends Component {
 
     public function sortSelected()
     {
-        // Séparer les produits sélectionnés et non sélectionnés
-        $selected = [];
-        $notSelected = [];
-
-        foreach ($this->products as $product) {
-            if ($product['selected']) {
-                $selected[] = $product;
-            } else {
-                $notSelected[] = $product;
-            }
-        }
-
-        // Trier les sélectionnés par total (prix × quantité) décroissant
-        usort($selected, function ($a, $b) {
-            $totalA = $a['price'] * $a['quantity'];
-            $totalB = $b['price'] * $b['quantity'];
-            return $totalB <=> $totalA;
-        });
-
-        // Fusionner : sélectionnés en premier, puis non sélectionnés
-        $this->products = array_merge($selected, $notSelected);
+        $this->products = $this->productService->sortSelected($this->products);
     }
 
     public function getSelectedCountProperty()
     {
-        return count(array_filter($this->products, fn ($p) => $p['selected']));
+        return $this->productService->getSelectedCount($this->products);
     }
 
     public function getCartTotalProperty()
     {
-        return array_sum(array_map(fn ($p) => $p['selected'] ? $p['price'] * $p['quantity'] : 0, $this->products));
+        return $this->productService->calculateCartTotal($this->products);
     }
 };
 
