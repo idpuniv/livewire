@@ -20,6 +20,7 @@ new class () extends Component {
     public bool $showQuantityModal = false;
     public $editingProductId = null;
     public $editingQuantity = 1;
+    public ?string $mobilePaymentStatus = null;
 
     protected ProductService $productService;
     protected CartService $cartService;
@@ -40,8 +41,26 @@ new class () extends Component {
         'refreshPay' => '$refresh',
         'orderPaid' => 'orderPaid',
         'echo:products,.product.updated' => 'handleProductUpdate',
-        'echo:payments,.payment.completed' => 'handleProductUpdate'
+        'echo:payments,.payment.completed' => 'handleProductUpdate',
+        'showMobileReceipt' => 'setShowReceipt',
+        'paymentStatus' => 'paymentStatusUpdated',
     ];
+
+    public function setShowReceipt()
+{
+    $this->showReceiptMobile = true;
+}
+
+public function paymentStatusUpdated($status)
+{
+    $this->mobilePaymentStatus = $status;
+    
+    // Si on reçoit un statut (success/error) et que la commande a été réinitialisée
+    if (($status === 'success' || $status === 'error') && !$this->order && !$this->cart) {
+        // L'offcanvas reste ouvert avec le récapitulatif
+        $this->dispatch('show-payment-receipt');
+    }
+}
 
     public function mount()
     {
@@ -194,6 +213,7 @@ new class () extends Component {
 
     public function addToCart($productId)
     {
+        $this->mobilePaymentStatus = null;
         $product = collect($this->products)->first(fn ($p) => $p['id'] == $productId);
         if (!$product || $product['stock'] <= $product['quantity']) {
             return;
@@ -589,41 +609,106 @@ new class () extends Component {
     </div>
 
     <!-- OFFCANVAS POUR MOBILES - Le composant Pay DANS l'offcanvas -->
-    <div class="offcanvas offcanvas-sm offcanvas-bottom d-lg-none h-75" tabindex="-1" id="offcanvasPay"
-        aria-labelledby="offcanvasPayLabel" wire:ignore.self>
-        <div class="offcanvas-header bg-light">
-            <h5 class="offcanvas-title" id="offcanvasPayLabel">
-                @if($order && $order->status === 'confirmed')
+    <div class="offcanvas offcanvas-sm offcanvas-bottom d-lg-none h-75"
+     tabindex="-1"
+     id="offcanvasPay"
+     aria-labelledby="offcanvasPayLabel"
+     wire:ignore.self>
+
+    <!-- HEADER -->
+    <div class="offcanvas-header bg-light">
+        <h5 class="offcanvas-title" id="offcanvasPayLabel">
+
+            @if($mobilePaymentStatus === 'success' && !$order && !$cart)
                 <span class="text-success">
-                    <i class="fas fa-check-circle me-2"></i>Commande #{{ $order->id }} payée
+                    <i class="fas fa-check-circle me-2"></i>
+                    Paiement réussi
                 </span>
-                @else
-                <span>Paiement</span>
-                @endif
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
-        </div>
-        <div class="offcanvas-body p-0">
-            @if($order && $order->status === App\Enums\Status::CONFIRMED)
-            <div class="d-flex flex-column align-items-center justify-content-center h-100 py-5">
-                <div class="bg-success bg-opacity-10 rounded-circle p-4 mb-3">
-                    <i class="fas fa-check text-success fa-3x"></i>
-                </div>
-                <!-- Le titre "Paiement réussi !" a été supprimé car déjà dans l'en-tête -->
-                <p class="text-muted mb-2">Commande #{{ $order->id }}</p>
-                <p class="fw-bold text-dark fs-4 mb-3">{{ number_format($order->amount_paid ?? $order->invoice?->total ?? 0, 2) }}</p>
-                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="offcanvas">
-                    Fermer
-                </button>
-            </div>
             @else
-            <livewire:pay
-                :order="$order"
-                :cart="$cart"
-                :wire:key="'pay-mobile-'.($order->id ?? 'empty-'.Str::random(4))" />
+                <span>Paiement</span>
             @endif
-        </div>
+
+        </h5>
+
+        <button type="button"
+                class="btn-close"
+                data-bs-dismiss="offcanvas">
+        </button>
     </div>
+
+    <!-- BODY -->
+    <div class="offcanvas-body p-0">
+
+    {{-- ================= SUCCESS SCREEN (RÉCAPITULATIF) ================= --}}
+    @if($mobilePaymentStatus === 'success')
+
+        <div class="d-flex flex-column align-items-center justify-content-center h-100 py-4">
+
+            {{-- Petit indicateur "Dernier paiement" --}}
+            <div class="text-center mb-2">
+                <span class="badge bg-light text-secondary px-3 py-2 rounded-pill">
+                    <i class="fas fa-clock me-1" style="font-size: 10px;"></i>
+                    Dernier paiement
+                </span>
+            </div>
+
+            {{-- Icône de succès --}}
+            <div class="bg-success bg-opacity-10 rounded-circle p-3 mb-3">
+                <i class="fas fa-check-circle text-success fa-3x"></i>
+            </div>
+            
+            {{-- Détails du paiement --}}
+            <div class="bg-light rounded-3 p-3 mb-3 w-75">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-secondary">Total</span>
+                    <span class="fw-bold text-primary">1,800 XOF</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-secondary">Reçu</span>
+                    <span class="fw-bold">2,000 XOF</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-secondary">Monnaie</span>
+                    <span class="fw-bold text-success">200 XOF</span>
+                </div>
+            </div>
+
+            {{-- Informations client --}}
+            <div class="px-3 small w-75">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-secondary">Client</span>
+                    <span class="fw-medium">Emilie Dupont</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-secondary">Tél</span>
+                    <span class="fw-medium">65 12 04 30</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-secondary">{{ now()->format('d/m H:i') }}</span>
+                    <span class="fw-medium">#ORD-123</span>
+                </div>
+            </div>
+
+            {{-- Bouton pour fermer ou nouveau paiement --}}
+            <button class="btn btn-outline-secondary btn-sm px-4 mt-3"
+                    wire:click="$set('mobilePaymentStatus', null)">
+                Nouveau paiement
+            </button>
+
+        </div>
+
+    {{-- ================= NORMAL PAYMENT ================= --}}
+    @else
+
+        <livewire:pay
+            :order="$order"
+            :cart="$cart"
+            :wire:key="'pay-mobile-'.($order->id ?? 'empty-'.uniqid())" />
+
+    @endif
+
+</div>
+</div>
 
 </div>
 

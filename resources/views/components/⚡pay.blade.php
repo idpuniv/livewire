@@ -197,16 +197,21 @@ new class() extends Component {
 
         if ($result['success']) {
             $this->paymentStatus = 'success';
+            $this->dispatch('showMobileReceipt');
             
             $this->dispatch('clearCart2');
             $this->order = null;
+            $this->cart = null;
             $this->syncAmounts();
+
+            $this->dispatch('paymentStatus', status: 'success');
 
             session()->flash('success', $result['message']);
             $this->dispatch('startTimer');
             
         } else {
             $this->paymentStatus = 'error';
+            $this->dispatch('paymentStatus', status: 'error');
             session()->flash('error', $result['message']);
             $this->dispatch('startTimer');
         }
@@ -215,6 +220,7 @@ new class() extends Component {
     public function resetPaymentStatus()
     {
         $this->paymentStatus = null;
+        $this->dispatch('paymentStatus', status: null);
     }
 };
 
@@ -293,34 +299,100 @@ new class() extends Component {
             </div>
         </div>
 
-        {{-- Zone à hauteur fixe pour l'icône de statut --}}
-        <div class="d-none d-md-block" style="height: 120px; position: relative;">
-            @if($paymentStatus)
-            <div id="payment-status-icon" class="position-absolute start-50 translate-middle-x" style="top: 150px;">
-                <div class="position-relative">
-                    {{-- Halo/auréole --}}
-                    <div class="position-absolute top-50 start-50 translate-middle 
-                                {{ $paymentStatus === 'success' ? 'bg-success' : 'bg-danger' }} bg-opacity-10 rounded-circle"
-                         style="width: 70px; height: 70px;">
-                    </div>
+        {{-- Zone pour l'icône de statut et le récapitulatif statique --}}
+{{-- Zone à hauteur fixe pour l'icône de statut --}}
+<div class="d-none d-md-block" style="min-height: 220px; position: relative;">
+    {{-- Message par défaut quand pas de commande/panier et pas de statut --}}
+    @if(!$order && !$cart && !$paymentStatus)
+    <div class="position-absolute top-50 start-50 translate-middle w-100 text-center">
+        <div class="text-muted">
+            <i class="fas fa-receipt fa-3x mb-3 opacity-50"></i>
+            <p class="small mb-0">Aucune commande en cours</p>
+            <p class="small text-secondary">Sélectionnez ou créez une commande</p>
+        </div>
+    </div>
+    @endif
 
-                    {{-- Cercle principal --}}
-                    <div class="position-relative {{ $paymentStatus === 'success' ? 'bg-success' : 'bg-danger' }} rounded-circle d-flex align-items-center justify-content-center"
-                         style="width: 50px; height: 50px;">
-                        <i class="fas {{ $paymentStatus === 'success' ? 'fa-shopping-cart' : 'fa-exclamation-triangle' }} text-white fa-lg"></i>
-                        
-                        {{-- Petite icône sur la bordure --}}
-                        <div class="position-absolute" style="top: -8px; right: -8px;">
-                            <span class="bg-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" 
-                                  style="width: 22px; height: 22px; border: 2px solid {{ $paymentStatus === 'success' ? '#198754' : '#dc3545' }};">
-                                <i class="fas {{ $paymentStatus === 'success' ? 'fa-check' : 'fa-times' }} {{ $paymentStatus === 'success' ? 'text-success' : 'text-danger' }}" style="font-size: 12px;"></i>
-                            </span>
-                        </div>
-                    </div>
+    {{-- Récapitulatif du dernier paiement (quand success et plus de commande) --}}
+    @if($paymentStatus === 'success' && !$order && !$cart)
+    <div class="position-absolute start-50 translate-middle-x" style="top: 20px; width: 90%;">
+        {{-- Petit indicateur "Dernier paiement" --}}
+        <div class="text-center mb-1">
+            <span class="badge bg-light text-secondary px-2 py-1 rounded-pill">
+                <i class="fas fa-clock me-1" style="font-size: 10px;"></i>
+                Dernier paiement
+            </span>
+        </div>
+
+        {{-- Icône de succès --}}
+        <div class="text-center mb-2">
+            <div class="bg-success bg-opacity-10 rounded-circle p-2 d-inline-flex">
+                <i class="fas fa-check-circle text-success fa-2x"></i>
+            </div>
+        </div>
+        
+        {{-- Détails du paiement --}}
+        <div class="bg-light rounded-3 p-2 mb-2 small">
+            <div class="d-flex justify-content-between mb-1">
+                <span class="text-secondary">Total</span>
+                <span class="fw-bold text-primary">1,800 XOF</span>
+            </div>
+            <div class="d-flex justify-content-between mb-1">
+                <span class="text-secondary">Reçu</span>
+                <span class="fw-bold">2,000 XOF</span>
+            </div>
+            <div class="d-flex justify-content-between">
+                <span class="text-secondary">Monnaie</span>
+                <span class="fw-bold text-success">200 XOF</span>
+            </div>
+        </div>
+
+        {{-- Informations client --}}
+        <div class="px-2 small">
+            <div class="d-flex justify-content-between mb-1">
+                <span class="text-secondary">Client</span>
+                <span class="fw-medium">utilie Dupont</span>
+            </div>
+            <div class="d-flex justify-content-between mb-1">
+                <span class="text-secondary">Tél</span>
+                <span class="fw-medium">65 12 04 30</span>
+            </div>
+            <div class="d-flex justify-content-between">
+                <span class="text-secondary">{{ now()->format('d/m H:i') }}</span>
+                <span class="fw-medium">#{{ rand(100, 999) }}</span>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- Icône de statut pendant une transaction --}}
+    @if($paymentStatus && ($order || $cart))
+    <div id="payment-status-icon" class="position-absolute start-50 translate-middle-x" style="top: 150px;">
+        <div class="position-relative">
+            <div class="position-absolute top-50 start-50 translate-middle 
+                        {{ $paymentStatus === 'success' ? 'bg-success' : 'bg-danger' }} bg-opacity-10 rounded-circle"
+                 style="width: 60px; height: 60px;">
+            </div>
+            <div class="position-relative {{ $paymentStatus === 'success' ? 'bg-success' : 'bg-danger' }} rounded-circle d-flex align-items-center justify-content-center"
+                 style="width: 40px; height: 40px;">
+                <i class="fas {{ $paymentStatus === 'success' ? 'fa-shopping-cart' : 'fa-exclamation-triangle' }} text-white"></i>
+                <div class="position-absolute" style="top: -6px; right: -6px;">
+                    <span class="bg-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" 
+                          style="width: 18px; height: 18px; border: 2px solid {{ $paymentStatus === 'success' ? '#198754' : '#dc3545' }};">
+                        <i class="fas {{ $paymentStatus === 'success' ? 'fa-check' : 'fa-times' }} {{ $paymentStatus === 'success' ? 'text-success' : 'text-danger' }}" style="font-size: 10px;"></i>
+                    </span>
                 </div>
             </div>
-            @endif
         </div>
+        {{-- Petit texte sous l'icône --}}
+        <div class="text-center mt-2 small {{ $paymentStatus === 'success' ? 'text-success' : 'text-danger' }}">
+            {{ $paymentStatus === 'success' ? 'Paiement réussi' : 'Erreur de paiement' }}
+        </div>
+    </div>
+    @endif
+
+    {{-- Supprimer le texte "RECAP PAIMENT" qui n'est plus nécessaire --}}
+</div>
     </div>
 
     {{-- Footer --}}
