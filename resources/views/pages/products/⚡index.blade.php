@@ -10,10 +10,12 @@ new class () extends Component {
     public string $name = '';
     public string $code = '';
     public ?string $description = '';
-    public float $price = 0;
+    public $price = '';
+    public $tva_rate = '';
+    public $tva_amount = '';
     public int $stock = 0;
     public bool $published = false;
-    public float $tva_rate = 0;
+    public string $tva_input_mode = 'rate';
 
     public $editingProductId = null;
     public $showModal = false;
@@ -22,7 +24,6 @@ new class () extends Component {
     public $filterPublished = '';
     public int $perPage = 5;
 
-    // Nouveaux: Sélection multiple et actions groupées
     public $selectedProducts = [];
     public bool $selectAll = false;
     public array $bulkActions = [
@@ -31,6 +32,88 @@ new class () extends Component {
         'delete' => 'Supprimer',
     ];
     public $selectedBulkAction = '';
+
+    // Calculs automatiques simplifiés
+    public function updatedPrice()
+    {
+        if ($this->price === '') {
+            $this->price = 0;
+            $this->tva_rate = '';
+            $this->tva_amount = '';
+            return;
+        }
+        $this->calculerTva();
+    }
+
+    public function updatedTvaRate()
+    {
+        if ($this->tva_rate === '') {
+            $this->tva_amount = '';
+            return;
+        }
+        
+        if ($this->tva_input_mode === 'rate') {
+            $this->calculerTva();
+        }
+    }
+
+    public function updatedTvaAmount()
+    {
+        if ($this->tva_amount === '') {
+            $this->tva_rate = '';
+            return;
+        }
+
+        if ($this->tva_input_mode === 'amount') {
+            $this->calculerTva();
+        }
+    }
+
+    public function updatedTvaInputMode()
+    {
+        if ($this->price <= 0) {
+            $this->tva_rate = '';
+            $this->tva_amount = '';
+            return;
+        }
+        $this->calculerTva();
+    }
+
+    private function calculerTva()
+    {
+        $price = floatval($this->price ?: 0);
+        
+        if ($price <= 0) {
+            $this->tva_rate = '';
+            $this->tva_amount = '';
+            return;
+        }
+
+        if ($this->tva_input_mode === 'rate') {
+            // Mode pourcentage : on calcule le montant à partir du taux
+            $rate = floatval($this->tva_rate ?: 0);
+            if ($rate > 0) {
+                $this->tva_amount = number_format(($price * $rate) / 100, 0, '.', '');
+            } else {
+                $this->tva_amount = '';
+            }
+        } else {
+            // Mode montant : on calcule le taux à partir du montant
+            $amount = floatval($this->tva_amount ?: 0);
+            if ($amount > 0) {
+                $this->tva_rate = number_format(($amount / $price) * 100, 2, '.', '');
+            } else {
+                $this->tva_rate = '';
+            }
+        }
+    }
+
+    public function getPriceTtcProperty()
+    {
+        $price = floatval($this->price ?: 0);
+        $amount = floatval($this->tva_amount ?: 0);
+        return $price + $amount;
+    }
 
     public function updatedSearch()
     {
@@ -46,7 +129,6 @@ new class () extends Component {
         $this->selectAll = false;
     }
 
-    // Gestion de la sélection multiple
     public function updatedSelectAll($value)
     {
         if ($value) {
@@ -87,8 +169,6 @@ new class () extends Component {
         return $query->latest()->paginate($this->perPage);
     }
 
-    // Action groupée SIMPLIFIÉE
-    // Action groupée
     public function performBulkAction($action = null)
     {
         if ($action) {
@@ -100,16 +180,12 @@ new class () extends Component {
             return;
         }
 
-        // DEBUG : afficher les IDs sélectionnés
-        session()->flash('info', 'IDs sélectionnés : ' . implode(', ', $this->selectedProducts));
-
         if (empty($this->selectedBulkAction)) {
             session()->flash('error', 'Veuillez choisir une action.');
             return;
         }
 
         $productIds = $this->selectedProducts;
-        $count = count($productIds);
 
         switch ($this->selectedBulkAction) {
             case 'publish':
@@ -131,7 +207,6 @@ new class () extends Component {
         $this->selectedBulkAction = '';
     }
 
-    // Vider la sélection
     public function clearSelection()
     {
         $this->selectedProducts = [];
@@ -148,27 +223,38 @@ new class () extends Component {
                 $this->code = $product->code;
                 $this->description = $product->description;
                 $this->price = $product->price;
+                $this->tva_rate = $product->tva_rate ?? '';
+                $this->tva_amount = $product->tva_rate > 0 ? ($product->price * $product->tva_rate) / 100 : '';
                 $this->stock = $product->stock;
                 $this->published = !is_null($product->published_at);
                 $this->editingProductId = $product->id;
             }
         } else {
-            $this->reset(['name', 'code', 'description', 'price', 'stock', 'published', 'editingProductId']);
+            $this->reset(['name', 'code', 'description', 'stock', 'published', 'editingProductId']);
+            $this->price = '';
+            $this->tva_rate = '';
+            $this->tva_amount = '';
+            $this->tva_input_mode = 'rate';
         }
         $this->showModal = true;
     }
 
     public function save()
     {
+        // Convertir les chaînes vides en 0 pour la validation
+        $price = $this->price === '' ? 0 : $this->price;
+        $tva_rate = $this->tva_rate === '' ? 0 : $this->tva_rate;
+
         $validated = $this->validate([
             'name' => 'required|max:255',
             'code' => 'required|unique:products,code' . ($this->editingProductId ? ',' . $this->editingProductId : ''),
             'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
             'stock' => 'required|integer|min:0',
             'published' => 'boolean',
         ]);
 
+        $validated['price'] = $price;
+        $validated['tva_rate'] = $tva_rate;
         $validated['published_at'] = $this->published ? now() : null;
 
         if ($this->editingProductId) {
@@ -179,7 +265,11 @@ new class () extends Component {
             session()->flash('success', 'Produit créé !');
         }
 
-        $this->reset(['name', 'code', 'description', 'price', 'stock', 'published', 'editingProductId']);
+        $this->reset(['name', 'code', 'description', 'stock', 'published', 'editingProductId']);
+        $this->price = '';
+        $this->tva_rate = '';
+        $this->tva_amount = '';
+        $this->tva_input_mode = 'rate';
         $this->showModal = false;
     }
 
@@ -194,8 +284,8 @@ new class () extends Component {
         return ['products' => $this->getProductsForCurrentPage()];
     }
 };
-
 ?>
+
 
 <div class="container py-4">
     <!-- Flash Messages -->
@@ -284,7 +374,9 @@ new class () extends Component {
                             
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Nom</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Code</th>
-                            <th class="py-3 px-4 fw-semibold text-dark border-bottom">Prix</th>
+                            <th class="py-3 px-4 fw-semibold text-dark border-bottom">Prix HT</th>
+                            <th class="py-3 px-4 fw-semibold text-dark border-bottom">TVA</th>
+                            <th class="py-3 px-4 fw-semibold text-dark border-bottom">Prix TTC</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Stock</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom">Statut</th>
                             <th class="py-3 px-4 fw-semibold text-dark border-bottom text-end">Actions</th>
@@ -322,6 +414,9 @@ new class () extends Component {
                     </thead>
                     <tbody>
                         @forelse($products as $product)
+                        @php
+                            $tvaAmount = ($product->price * $product->tva_rate) / 100;
+                        @endphp
                         <tr wire:key="{{ $product->id }}" class="{{ in_array($product->id, $selectedProducts) ? 'table-primary' : '' }}">
                             <td class="py-3 px-4">
                                 <div class="form-check">
@@ -336,6 +431,10 @@ new class () extends Component {
                             <td class="py-3 px-4">{{ Str::limit($product->name, 50) }}</td>
                             <td class="py-3 px-4">{{ $product->code }}</td>
                             <td class="py-3 px-4">{{ number_format($product->price, 0, ',', ' ') }} FCFA</td>
+                            <td class="py-3 px-4">
+                                {{ $product->tva_rate }}% ({{ number_format($tvaAmount, 0, ',', ' ') }} FCFA)
+                            </td>
+                            <td class="py-3 px-4">{{ number_format($product->price + $tvaAmount, 0, ',', ' ') }} FCFA</td>
                             <td class="py-3 px-4">{{ $product->stock }}</td>
                             <td class="py-3 px-4">
                                 @if($product->published_at)
@@ -369,7 +468,7 @@ new class () extends Component {
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">
+                            <td colspan="10" class="text-center py-5 text-muted">
                                 <i class="bi bi-box-seam display-5 mb-3"></i>
                                 <h5 class="fw-semibold mb-2">Aucun produit trouvé</h5>
                                 <p>{{ $search ? 'Aucun résultat pour votre recherche.' : 'Commencez par créer votre premier produit.' }}</p>
@@ -474,14 +573,89 @@ new class () extends Component {
                         </div>
                         <div class="row g-3 mb-3">
                             <div class="col">
-                                <label class="form-label fw-semibold">Prix <span class="text-danger">*</span></label>
-                                <input type="number" step="0.01" class="form-control" wire:model="price">
+                                <label class="form-label fw-semibold">Prix HT <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control" wire:model.live="price">
                             </div>
                             <div class="col">
                                 <label class="form-label fw-semibold">Stock <span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" wire:model="stock">
                             </div>
                         </div>
+
+                        <!-- Section TVA avec double saisie -->
+                        <!-- Section TVA avec double saisie -->
+<div class="card bg-light border-0 mb-3">
+    <div class="card-body">
+        <h6 class="fw-semibold mb-3">Taxe (TVA)</h6>
+        
+        <div class="mb-3">
+            <label class="form-label">Mode de saisie</label>
+            <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="tva_input_mode" id="mode_rate" value="rate" wire:model.live="tva_input_mode">
+                <label class="btn btn-outline-primary" for="mode_rate">Saisir en %</label>
+                
+                <input type="radio" class="btn-check" name="tva_input_mode" id="mode_amount" value="amount" wire:model.live="tva_input_mode">
+                <label class="btn btn-outline-primary" for="mode_amount">Saisir en FCFA</label>
+            </div>
+        </div>
+
+        @if($tva_input_mode === 'rate')
+        <div class="mb-3">
+            <label class="form-label">Taux (%)</label>
+            <div class="input-group">
+                <input type="number" 
+                       step="0.01" 
+                       class="form-control" 
+                       wire:model.live="tva_rate"
+                       wire:blur="$refresh">
+                <span class="input-group-text bg-white">%</span>
+            </div>
+            @if($price > 0 && $tva_amount > 0)
+            <div class="form-text text-success">
+                Montant TVA: {{ number_format($tva_amount, 0, ',', ' ') }} FCFA
+            </div>
+            @endif
+            @if($price > 0 && $tva_rate == '' && $tva_amount > 0)
+            <div class="form-text text-info">
+                Taux calculé: {{ number_format(($tva_amount / $price) * 100, 2) }}%
+            </div>
+            @endif
+        </div>
+        @else
+        <div class="mb-3">
+            <label class="form-label">Montant TVA (FCFA)</label>
+            <div class="input-group">
+                <input type="number" 
+                       step="0.01" 
+                       class="form-control" 
+                       wire:model.live="tva_amount"
+                       wire:blur="$refresh">
+                <span class="input-group-text bg-white">FCFA</span>
+            </div>
+            @if($price > 0 && $tva_rate > 0)
+            <div class="form-text text-success">
+                Taux: {{ number_format($tva_rate, 2) }}%
+            </div>
+            @endif
+            @if($price > 0 && $tva_amount == '' && $tva_rate > 0)
+            <div class="form-text text-info">
+                Montant calculé: {{ number_format(($price * $tva_rate) / 100, 0, ',', ' ') }} FCFA
+            </div>
+            @endif
+        </div>
+        @endif
+
+        @if($price > 0 && ($tva_rate > 0 || $tva_amount > 0))
+        <div class="mt-3 p-2 bg-white rounded">
+            <div class="d-flex justify-content-between">
+                <span class="text-secondary">Prix TTC:</span>
+                <span class="fw-bold text-success">{{ number_format($price + $tva_amount, 0, ',', ' ') }} FCFA</span>
+            </div>
+        </div>
+        @endif
+    </div>
+</div>
+
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" wire:model="published" id="publishedSwitch">
                             <label class="form-check-label fw-semibold" for="publishedSwitch">Publié</label>
