@@ -34,9 +34,12 @@ class Cart extends Model
 
     // Taxe (20%)
     public function getTaxAttribute()
-    {
-        return $this->subtotal * 0.20;
-    }
+{
+    return $this->items->sum(function ($item) {
+        $lineHt = $item->quantity * $item->price;
+        return $lineHt * ($item->tva_rate ?? 0) / 100;
+    });
+}
 
     // Total TTC
     public function getTotalAttribute()

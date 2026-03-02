@@ -8,6 +8,7 @@ Route::get('/', function () {
 
 
 Route::livewire('/products', 'pages::products.index');
+Route::livewire('/promotions', 'pages::promotions.index');
 Route::livewire('/ventes', 'pages::sales.create');
 Route::livewire('/caisse', 'pages::payments.create');
 Route::livewire('/users', 'pages::users.create');

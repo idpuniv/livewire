@@ -13,6 +13,7 @@ new class () extends Component {
     public float $price = 0;
     public int $stock = 0;
     public bool $published = false;
+    public float $tva_rate = 0;
 
     public $editingProductId = null;
     public $showModal = false;

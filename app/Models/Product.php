@@ -18,6 +18,7 @@ class Product extends Model
         'published_at',
         'barcode',
         'image',
+        'tva_rate',
     ];
 
     protected static function booted()
