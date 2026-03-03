@@ -21,6 +21,9 @@ new class () extends Component {
     public $editingProductId = null;
     public $editingQuantity = 1;
     public ?string $mobilePaymentStatus = null;
+    
+    // Nouvelle propriété pour le survol
+    public $hoveredProductId = null;
 
     protected ProductService $productService;
     protected CartService $cartService;
@@ -44,23 +47,84 @@ new class () extends Component {
         'echo:payments,.payment.completed' => 'handleProductUpdate',
         'showMobileReceipt' => 'setShowReceipt',
         'paymentStatus' => 'paymentStatusUpdated',
+        'keyboardShortcut' => 'handleKeyboardShortcut',
     ];
 
-    public function setShowReceipt()
-{
-    $this->showReceiptMobile = true;
-}
-
-public function paymentStatusUpdated($status)
-{
-    $this->mobilePaymentStatus = $status;
-    
-    // Si on reçoit un statut (success/error) et que la commande a été réinitialisée
-    if (($status === 'success' || $status === 'error') && !$this->order && !$this->cart) {
-        // L'offcanvas reste ouvert avec le récapitulatif
-        $this->dispatch('show-payment-receipt');
+    public function setHoveredProduct($productId)
+    {
+        $this->hoveredProductId = $productId;
+        $this->dispatch('product-hovered', productId: $productId);
     }
-}
+
+    public function handleKeyboardShortcut($key, $productId)
+    {
+        if (!$productId) return;
+        
+        $product = collect($this->products)->first(fn ($p) => $p['id'] == $productId);
+        if (!$product) return;
+        
+        switch ($key) {
+            case '+':
+            case 'Add':
+                $this->addToCart($productId);
+                break;
+                
+            case '-':
+            case 'Subtract':
+                if ($product['selected']) {
+                    if ($product['quantity'] > 1) {
+                        $this->removeFromCart($productId);
+                    } else {
+                        // Supprimer complètement
+                        foreach ($this->products as &$p) {
+                            if ($p['id'] == $productId) {
+                                $p['quantity'] = 0;
+                                $p['selected'] = false;
+                                break;
+                            }
+                        }
+                        if ($this->cart) {
+                            $this->cartService->removeFromCart($this->cart, $productId);
+                        }
+                        $this->dispatch('refreshPay');
+                    }
+                }
+                break;
+                
+            case 'Delete':
+            case 'Del':
+                if ($product['selected']) {
+                    foreach ($this->products as &$p) {
+                        if ($p['id'] == $productId) {
+                            $p['quantity'] = 0;
+                            $p['selected'] = false;
+                            break;
+                        }
+                    }
+                    if ($this->cart) {
+                        $this->cartService->removeFromCart($this->cart, $productId);
+                    }
+                    $this->dispatch('refreshPay');
+                }
+                break;
+        }
+    }
+
+    public function setShowReceipt()
+    {
+        $this->showReceiptMobile = true;
+    }
+
+    public function paymentStatusUpdated($status)
+    {
+        $this->mobilePaymentStatus = $status;
+        
+        // Si on reçoit un statut (success/error) et que la commande a été réinitialisée
+        if (($status === 'success' || $status === 'error') && !$this->order && !$this->cart) {
+            // L'offcanvas reste ouvert avec le récapitulatif
+            $this->dispatch('show-payment-receipt');
+        }
+    }
 
     public function mount()
     {
@@ -137,8 +201,6 @@ public function paymentStatusUpdated($status)
             return null;
         }
     }
-
-    
 
     public function getFilteredProductsProperty()
     {
@@ -363,11 +425,23 @@ public function paymentStatusUpdated($status)
                 <div class="products-container">
                     <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-4 g-3">
                         @foreach($this->filteredProducts as $product)
-                        <div class="col">
+                        <div class="col"
+                             wire:key="product-{{ $product['id'] }}"
+                             wire:mouseenter="setHoveredProduct({{ $product['id'] }})"
+                             wire:mouseleave="setHoveredProduct(null)">
+                            
                             <div class="card h-100 product-card {{ $product['selected'] ? 'selected' : '' }} {{ $product['stock'] === 0 ? 'opacity-50' : '' }}"
-                                wire:click="addToCart({{ $product['id'] }})"
-                                @if($product['stock']===0) disabled @endif
-                                style="cursor: pointer;">
+                                 wire:click="addToCart({{ $product['id'] }})"
+                                 @if($product['stock']===0) disabled @endif
+                                 style="cursor: pointer; position: relative;">
+
+                                <!-- Indicateur de survol pour les raccourcis -->
+                                @if($hoveredProductId === $product['id'])
+                                <div class="position-absolute top-0 end-0 m-2 bg-dark bg-opacity-75 text-white px-2 py-1 rounded small" 
+                                     style="font-size: 10px; z-index: 10;">
+                                    + / - / Del
+                                </div>
+                                @endif
 
                                 <!-- Image container avec position relative pour le bouton -->
                                 <div class="position-relative">
@@ -715,6 +789,7 @@ public function paymentStatusUpdated($status)
 @script
 <script>
     let offcanvasInstance = null;
+    let hoveredProductId = null; // Variable locale pour suivre le survol
 
     // Initialiser l'offcanvas une seule fois
     document.addEventListener('livewire:init', () => {
@@ -722,7 +797,6 @@ public function paymentStatusUpdated($status)
         if (offcanvasEl) {
             offcanvasInstance = new bootstrap.Offcanvas(offcanvasEl);
             
-            // Nettoyer l'overlay quand l'offcanvas est caché
             offcanvasEl.addEventListener('hidden.bs.offcanvas', function () {
                 document.body.classList.remove('modal-open');
                 document.body.style.overflow = '';
@@ -731,27 +805,82 @@ public function paymentStatusUpdated($status)
                 if (backdrop) backdrop.remove();
             });
         }
+
+        // Écouter les mises à jour de Livewire pour hoveredProductId
+        Livewire.hook('morphed', () => {
+            // Rien à faire ici
+        });
+    });
+
+    // Écouter l'événement de survol envoyé par Livewire
+    $wire.on('product-hovered', (data) => {
+        hoveredProductId = data.productId;
+        console.log('Produit survolé:', hoveredProductId);
+    });
+
+    // Raccourcis clavier
+    document.addEventListener('keydown', function(e) {
+        // Ignorer si on est dans un champ de saisie
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        if (!hoveredProductId) {
+            console.log('Aucun produit survolé');
+            return;
+        }
+        
+        let key = e.key;
+        let code = e.code;
+        
+        console.log('Touche pressée:', key, code, 'Produit:', hoveredProductId);
+        
+        // Touche PLUS
+        if (key === '+' || key === '=' || code === 'NumpadAdd' || code === 'Equal') {
+            e.preventDefault();
+            console.log('ACTION: Ajouter au panier', hoveredProductId);
+            $wire.dispatch('keyboardShortcut', { 
+                key: '+', 
+                productId: hoveredProductId 
+            });
+        }
+        
+        // Touche MOINS
+        else if (key === '-' || key === '_' || code === 'NumpadSubtract' || code === 'Minus') {
+            e.preventDefault();
+            console.log('ACTION: Retirer du panier', hoveredProductId);
+            $wire.dispatch('keyboardShortcut', { 
+                key: '-', 
+                productId: hoveredProductId 
+            });
+        }
+        
+        // Touche SUPPR
+        else if (key === 'Delete' || key === 'Del' || code === 'Delete') {
+            e.preventDefault();
+            console.log('ACTION: Supprimer du panier', hoveredProductId);
+            $wire.dispatch('keyboardShortcut', { 
+                key: 'Delete', 
+                productId: hoveredProductId 
+            });
+        }
     });
 
     $wire.on('open-pay-offcanvas', () => {
         if (offcanvasInstance) {
-            // Fermer toute instance existante
             offcanvasInstance.hide();
-            // Petite pause pour permettre la fermeture
             setTimeout(() => {
                 offcanvasInstance.show();
             }, 150);
         }
     });
 
-    // Gérer le redimensionnement
     window.addEventListener('resize', () => {
         if (window.innerWidth >= 992 && offcanvasInstance) {
             offcanvasInstance.hide();
         }
     });
 
-    // Nettoyer quand le composant est démonté
     $wire.$on('livewire:navigated', () => {
         if (offcanvasInstance) {
             offcanvasInstance.hide();
