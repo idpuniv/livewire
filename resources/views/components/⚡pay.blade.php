@@ -172,12 +172,10 @@ new class() extends Component {
                     $this->syncAmounts();
 
                     session()->flash('success', $result['message']);
-                    $this->dispatch('startTimer');
                     
                 } else {
                     $this->paymentStatus = 'error';
                     session()->flash('error', $result['message']);
-                    $this->dispatch('startTimer');
                 }
             } catch (\Exception $e) {
                 Log::error('Exception dans pay(): ' . $e->getMessage());
@@ -223,13 +221,11 @@ new class() extends Component {
                 $this->dispatch('paymentStatus', status: 'success');
 
                 session()->flash('success', $result['message']);
-                $this->dispatch('startTimer');
                 
             } else {
                 $this->paymentStatus = 'error';
                 $this->dispatch('paymentStatus', status: 'error');
                 session()->flash('error', $result['message']);
-                $this->dispatch('startTimer');
             }
         } catch (\Exception $e) {
             Log::error('Exception dans processPayment(): ' . $e->getMessage());
@@ -432,16 +428,3 @@ new class() extends Component {
         </button>
     </div>
 </div>
-
-<script>
-document.addEventListener('livewire:init', function() {
-    let timer;
-    
-    Livewire.on('startTimer', function() {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(function() {
-            Livewire.dispatch('resetPaymentStatus');
-        }, 3000);
-    });
-});
-</script>

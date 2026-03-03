@@ -14,9 +14,9 @@ class Order extends Model
 
     // Une commande appartient à une facture
     public function invoice()
-    {
-        return $this->belongsTo(Invoice::class);
-    }
+{
+    return $this->hasOne(Invoice::class);  // ← hasOne, pas belongsTo !
+}
 
     // Une commande peut générer un reçu
     public function receipt()

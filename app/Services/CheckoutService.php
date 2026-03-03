@@ -34,6 +34,7 @@ class CheckoutService
     public function createOrderAndPay(Cart $cart, float $amountPaid, string $paymentMethod): array
     {
         // Vérification du montant
+        // dd($cart->total); // j ai une valeur
         if ($paymentMethod === 'cash' && $amountPaid < $cart->total) {
             return [
                 'success' => false,
@@ -45,7 +46,9 @@ class CheckoutService
         try {
             return DB::transaction(function () use ($cart, $amountPaid, $paymentMethod) {
                 // 1. Créer la commande
+                // dd($cart->total); // j ai une valeur
                 $order = $this->orderService->createOrderFromCart($cart);
+                // dd($order->total); j ai une valeur
                 
                 // 2. Payer la commande
                 $paymentResult = $this->paymentService->processPayment(
@@ -66,9 +69,10 @@ class CheckoutService
                 ];
             });
         } catch (\Throwable $e) {
+
             return [
                 'success' => false,
-                'message' => 'Erreur: ' . $e->getMessage(),
+                'message' => 'Erreur IDO: ' . $e->getMessage(),
                 'status' => 'error'
             ];
         }
