@@ -48,7 +48,6 @@ final class Roles
                 'permissions' => [
                     ...OrderPermissions::all(),
                     ...PaymentPermissions::all(),
-                    // ...ProductPermissions::all(),
                     // ...UserPermissions::all(),
                     // ...SystemPermissions::all(),
                 ]
