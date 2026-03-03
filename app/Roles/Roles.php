@@ -12,90 +12,88 @@ use App\Permissions\ReportPermissions;
 final class Roles
 {
     public const ADMIN = 'admin';
-    public const SUPER_ADMIN = 'super_admin';
-    public const RECORDER = 'recorder';
     public const CASHIER = 'cashier';
-    public const SENIOR_CASHIER = 'senior_cashier';
-    public const FLOOR_MANAGER = 'floor_manager';
-    public const STORE_MANAGER = 'store_manager';
 
-    public const GUARD = 'web';
-
-    public static function labels(): array
+    public static function web(): array
     {
         return [
-            self::ADMIN => 'Administrateur',
-            self::SUPER_ADMIN => 'Super Administrateur',
-            self::RECORDER => 'Caissier Enregistreur',
-            self::CASHIER => 'Caissier',
-            self::SENIOR_CASHIER => 'Caissier Senior',
-            self::FLOOR_MANAGER => 'Manager de surface',
-            self::STORE_MANAGER => 'Manager de magasin',
-        ];
-    }
-
-    public static function getPermissions(string $role): array
-    {
-        return match($role) {
-            // === ADMIN ===
             self::ADMIN => [
-                OrderPermissions::CREATE,
-                OrderPermissions::VIEW,
-                OrderPermissions::UPDATE,
-                OrderPermissions::DELETE,
-                PaymentPermissions::PROCESS,
-                PaymentPermissions::VIEW,
-                PaymentPermissions::REFUND,
-                UserPermissions::CREATE,
-                UserPermissions::VIEW,
-                UserPermissions::UPDATE,
-                UserPermissions::DELETE,
-                UserPermissions::ASSIGN_ROLES,
-                SystemPermissions::VIEW_LOGS,
-                SystemPermissions::MANAGE_SETTINGS,
-            ],
-            
-            // === CAISSIERS ===
-            self::RECORDER => [
-                // Permissions individuelles
-                OrderPermissions::CREATE,
-                OrderPermissions::VIEW,
-                OrderPermissions::LIST,
-                ProductPermissions::VIEW,
-                // Pas de PaymentPermissions
+                'label' => 'Administrateur',
+                'permissions' => [
+                    OrderPermissions::CREATE,
+                    OrderPermissions::VIEW,
+                    OrderPermissions::UPDATE,
+                    OrderPermissions::DELETE,
+                    PaymentPermissions::VIEW,
+                ]
             ],
             
             self::CASHIER => [
-                OrderPermissions::CREATE,
-                OrderPermissions::VIEW,
-                OrderPermissions::LIST,
-                PaymentPermissions::PROCESS,  // ← Permission spécifique
-                PaymentPermissions::VIEW,
-                ProductPermissions::VIEW,
+                'label' => 'Caissier',
+                'permissions' => [
+                    OrderPermissions::CREATE,
+                    OrderPermissions::VIEW,
+                    OrderPermissions::LIST,
+                    PaymentPermissions::VIEW,
+                ]
             ],
-            
-            self::SENIOR_CASHIER => [
-                OrderPermissions::CREATE,
-                OrderPermissions::VIEW,
-                OrderPermissions::LIST,
-                OrderPermissions::UPDATE,
-                PaymentPermissions::PROCESS,
-                PaymentPermissions::VIEW,
-                PaymentPermissions::REFUND,    // ← Permission spécifique
-                ProductPermissions::VIEW,
+        ];
+    }
+
+    public static function admin(): array
+    {
+        return [
+            self::ADMIN => [
+                'label' => 'Super Admin',
+                'permissions' => [
+                    ...OrderPermissions::all(),
+                    ...PaymentPermissions::all(),
+                    // ...ProductPermissions::all(),
+                    // ...UserPermissions::all(),
+                    // ...SystemPermissions::all(),
+                ]
             ],
-            
-            default => []
+        ];
+    }
+
+    public static function guards(): array
+    {
+        return ['web'];
+    }
+
+    public static function of(string $guard): array
+    {
+        return match($guard) {
+            'web' => self::web(),
+            default => [],
         };
+    }
+
+    public static function permissions(string $guard, string $role): array
+    {
+        return self::of($guard)[$role]['permissions'] ?? [];
+    }
+
+    public static function label(string $guard, string $role): string
+    {
+        return self::of($guard)[$role]['label'] ?? $role;
+    }
+
+    public static function has(string $guard, string $role): bool
+    {
+        return isset(self::of($guard)[$role]);
     }
 
     public static function all(): array
     {
-        return array_keys(self::labels());
+        return [
+            self::ADMIN,
+            self::CASHIER,
+        ];
     }
 
     public static function guard(): string
     {
-        return self::GUARD;
+        return 'web';
     }
 }
