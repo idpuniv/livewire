@@ -251,7 +251,7 @@ new class() extends Component {
                 <span class="fw-medium">{{ number_format($order?->invoice?->subtotal ?? $cart?->subtotal ?? 0, 2) }} XOF</span>
             </div>
             <div class="d-flex justify-content-between">
-                <span class="text-secondary">TVA (20%)</span>
+                <span class="text-secondary">TVA</span>
                 <span class="fw-medium text-danger">{{ number_format($order?->invoice?->tax ?? $cart?->tax ?? 0, 2) }} XOF</span>
             </div>
         </div>

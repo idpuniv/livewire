@@ -13,7 +13,7 @@ new class () extends Component {
     public $price = '';
     public $tva_rate = '';
     public $tva_amount = '';
-    public int $stock = 0;
+    public $stock = '';
     public bool $published = false;
     public string $tva_input_mode = 'rate';
 
@@ -33,87 +33,46 @@ new class () extends Component {
     ];
     public $selectedBulkAction = '';
 
-    // Calculs automatiques simplifiés
-    public function updatedPrice()
-    {
-        if ($this->price === '') {
-            $this->price = 0;
-            $this->tva_rate = '';
-            $this->tva_amount = '';
-            return;
-        }
-        $this->calculerTva();
+    // Calculs simples - on ne touche JAMAIS à la valeur saisie
+ public function updatedTvaRate()
+{
+    if ($this->tva_input_mode === 'rate') {
+        $price = floatval($this->price);
+        $rate  = floatval($this->tva_rate);
+
+        // Calcul pour affichage uniquement
+        $this->calculated_tva_amount = $price > 0 ? ($price * $rate) / 100 : 0;
     }
+}
 
-    public function updatedTvaRate()
-    {
-        if ($this->tva_rate === '') {
-            $this->tva_amount = '';
-            return;
-        }
-        
-        if ($this->tva_input_mode === 'rate') {
-            $this->calculerTva();
-        }
+public function updatedTvaAmount()
+{
+    if ($this->tva_input_mode === 'amount') {
+        $price  = floatval($this->price);
+        $amount = floatval($this->tva_amount);
+
+        // Calcul pour affichage uniquement
+        $this->calculated_tva_rate = $price > 0 ? ($amount / $price) * 100 : 0;
     }
+}
 
-    public function updatedTvaAmount()
-    {
-        if ($this->tva_amount === '') {
-            $this->tva_rate = '';
-            return;
-        }
 
-        if ($this->tva_input_mode === 'amount') {
-            $this->calculerTva();
-        }
-    }
+public function updatedTvaInputMode($mode)
+{
+    // On ne modifie jamais la valeur saisie
+    // On met juste à jour les calculs pour affichage
+    $this->updatedTvaRate();
+    $this->updatedTvaAmount();
+}
 
-    public function updatedTvaInputMode()
-    {
-        if ($this->price <= 0) {
-            $this->tva_rate = '';
-            $this->tva_amount = '';
-            return;
-        }
-        $this->calculerTva();
-    }
-
-    private function calculerTva()
-    {
-        $price = floatval($this->price ?: 0);
-        
-        if ($price <= 0) {
-            $this->tva_rate = '';
-            $this->tva_amount = '';
-            return;
-        }
-
-        if ($this->tva_input_mode === 'rate') {
-            // Mode pourcentage : on calcule le montant à partir du taux
-            $rate = floatval($this->tva_rate ?: 0);
-            if ($rate > 0) {
-                $this->tva_amount = number_format(($price * $rate) / 100, 0, '.', '');
-            } else {
-                $this->tva_amount = '';
-            }
-        } else {
-            // Mode montant : on calcule le taux à partir du montant
-            $amount = floatval($this->tva_amount ?: 0);
-            if ($amount > 0) {
-                $this->tva_rate = number_format(($amount / $price) * 100, 2, '.', '');
-            } else {
-                $this->tva_rate = '';
-            }
-        }
-    }
 
     public function getPriceTtcProperty()
-    {
-        $price = floatval($this->price ?: 0);
-        $amount = floatval($this->tva_amount ?: 0);
-        return $price + $amount;
-    }
+{
+    $price  = floatval($this->price);
+    $amount = floatval($this->tva_amount);
+
+    return $price + $amount;
+}
 
     public function updatedSearch()
     {
@@ -230,48 +189,72 @@ new class () extends Component {
                 $this->editingProductId = $product->id;
             }
         } else {
-            $this->reset(['name', 'code', 'description', 'stock', 'published', 'editingProductId']);
+            $this->reset(['name', 'code', 'description', 'published', 'editingProductId']);
             $this->price = '';
             $this->tva_rate = '';
             $this->tva_amount = '';
+            $this->stock = '';
             $this->tva_input_mode = 'rate';
         }
         $this->showModal = true;
     }
 
     public function save()
-    {
-        // Convertir les chaînes vides en 0 pour la validation
-        $price = $this->price === '' ? 0 : $this->price;
-        $tva_rate = $this->tva_rate === '' ? 0 : $this->tva_rate;
+{
+    // Validation des champs requis
+    $validated = $this->validate([
+        'name' => 'required|max:255',
+        'code' => 'required|unique:products,code' . ($this->editingProductId ? ',' . $this->editingProductId : ''),
+        'description' => 'nullable|string',
+        'published' => 'boolean',
+    ]);
 
-        $validated = $this->validate([
-            'name' => 'required|max:255',
-            'code' => 'required|unique:products,code' . ($this->editingProductId ? ',' . $this->editingProductId : ''),
-            'description' => 'nullable|string',
-            'stock' => 'required|integer|min:0',
-            'published' => 'boolean',
-        ]);
-
-        $validated['price'] = $price;
-        $validated['tva_rate'] = $tva_rate;
-        $validated['published_at'] = $this->published ? now() : null;
-
-        if ($this->editingProductId) {
-            Product::find($this->editingProductId)->update($validated);
-            session()->flash('success', 'Produit mis à jour !');
-        } else {
-            Product::create($validated);
-            session()->flash('success', 'Produit créé !');
-        }
-
-        $this->reset(['name', 'code', 'description', 'stock', 'published', 'editingProductId']);
-        $this->price = '';
-        $this->tva_rate = '';
-        $this->tva_amount = '';
-        $this->tva_input_mode = 'rate';
-        $this->showModal = false;
+    // Préparation des valeurs numériques
+    $price = $this->price === '' ? 0 : floatval($this->price);
+    $stock = $this->stock === '' ? 0 : intval($this->stock);
+    
+    // Calcul de la TVA au moment de la sauvegarde
+    if ($this->tva_input_mode === 'amount' && $price > 0) {
+        // Mode montant : on calcule le taux à partir du montant saisi
+        $amount = floatval($this->tva_amount);
+        $tva_rate = $amount > 0 ? ($amount / $price) * 100 : 0;
+    } else {
+        // Mode pourcentage : on prend le taux saisi directement
+        $tva_rate = $this->tva_rate === '' ? 0 : floatval($this->tva_rate);
     }
+
+    // Construction du tableau de données
+    $data = [
+        'name' => $this->name,
+        'code' => $this->code,
+        'description' => $this->description,
+        'price' => $price,
+        'tva_rate' => $tva_rate,  // ✅ Valeur calculée au moment de la sauvegarde
+        'stock' => $stock,
+        'published_at' => $this->published ? now() : null,
+    ];
+
+    // Sauvegarde en base
+    if ($this->editingProductId) {
+        // Mise à jour
+        $product = Product::find($this->editingProductId);
+        $product->update($data);
+        session()->flash('success', 'Produit mis à jour avec succès !');
+    } else {
+        // Création
+        Product::create($data);
+        session()->flash('success', 'Produit créé avec succès !');
+    }
+
+    // Réinitialisation du formulaire
+    $this->reset(['name', 'code', 'description', 'published', 'editingProductId']);
+    $this->price = '';
+    $this->tva_rate = '';
+    $this->tva_amount = '';
+    $this->stock = '';
+    $this->tva_input_mode = 'rate';
+    $this->showModal = false;
+}
 
     public function delete($id)
     {
@@ -583,11 +566,11 @@ new class () extends Component {
                         </div>
 
                         <!-- Section TVA avec double saisie -->
-                        <!-- Section TVA avec double saisie -->
 <div class="card bg-light border-0 mb-3">
     <div class="card-body">
         <h6 class="fw-semibold mb-3">Taxe (TVA)</h6>
         
+        <!-- Mode de saisie -->
         <div class="mb-3">
             <label class="form-label">Mode de saisie</label>
             <div class="btn-group w-100" role="group">
@@ -599,57 +582,56 @@ new class () extends Component {
             </div>
         </div>
 
+        <!-- Saisie par taux -->
         @if($tva_input_mode === 'rate')
         <div class="mb-3">
             <label class="form-label">Taux (%)</label>
             <div class="input-group">
-                <input type="number" 
-                       step="0.01" 
-                       class="form-control" 
-                       wire:model.live="tva_rate"
-                       wire:blur="$refresh">
+                <input type="number" step="0.01" class="form-control" wire:model.live="tva_rate">
                 <span class="input-group-text bg-white">%</span>
             </div>
-            @if($price > 0 && $tva_amount > 0)
+            @if($price > 0 && $tva_rate > 0)
+            @php
+                $montantTva = (floatval($price) * floatval($tva_rate)) / 100;
+            @endphp
             <div class="form-text text-success">
-                Montant TVA: {{ number_format($tva_amount, 0, ',', ' ') }} FCFA
-            </div>
-            @endif
-            @if($price > 0 && $tva_rate == '' && $tva_amount > 0)
-            <div class="form-text text-info">
-                Taux calculé: {{ number_format(($tva_amount / $price) * 100, 2) }}%
+                Montant TVA: {{ number_format($montantTva, 0, ',', ' ') }} FCFA
             </div>
             @endif
         </div>
         @else
+        <!-- Saisie par montant -->
         <div class="mb-3">
             <label class="form-label">Montant TVA (FCFA)</label>
             <div class="input-group">
-                <input type="number" 
-                       step="0.01" 
-                       class="form-control" 
-                       wire:model.live="tva_amount"
-                       wire:blur="$refresh">
+                <input type="number" step="0.01" class="form-control" wire:model.live="tva_amount">
                 <span class="input-group-text bg-white">FCFA</span>
             </div>
-            @if($price > 0 && $tva_rate > 0)
+            @if($price > 0 && $tva_amount > 0)
+            @php
+                $tauxEquivalant = (floatval($tva_amount) / floatval($price)) * 100;
+            @endphp
             <div class="form-text text-success">
-                Taux: {{ number_format($tva_rate, 2) }}%
-            </div>
-            @endif
-            @if($price > 0 && $tva_amount == '' && $tva_rate > 0)
-            <div class="form-text text-info">
-                Montant calculé: {{ number_format(($price * $tva_rate) / 100, 0, ',', ' ') }} FCFA
+                Taux équivalent: {{ number_format($tauxEquivalant, 2) }}%
             </div>
             @endif
         </div>
         @endif
 
+        <!-- Prix TTC -->
         @if($price > 0 && ($tva_rate > 0 || $tva_amount > 0))
         <div class="mt-3 p-2 bg-white rounded">
             <div class="d-flex justify-content-between">
                 <span class="text-secondary">Prix TTC:</span>
-                <span class="fw-bold text-success">{{ number_format($price + $tva_amount, 0, ',', ' ') }} FCFA</span>
+                <span class="fw-bold text-success">
+                    @php
+                        $prix = floatval($price);
+                        $montant = $tva_input_mode === 'rate' 
+                            ? ($prix * floatval($tva_rate)) / 100 
+                            : floatval($tva_amount);
+                    @endphp
+                    {{ number_format($prix + $montant, 0, ',', ' ') }} FCFA
+                </span>
             </div>
         </div>
         @endif

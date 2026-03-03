@@ -14,14 +14,42 @@ class OrderItem extends Model
         'product_code',
         'unit_price',
         'quantity',
-        'total_price'
+        'total_ht',
+        'tax_rate',
+        'tax_amount',
+        'total_ttc'
     ];
 
     protected $casts = [
         'unit_price' => 'decimal:2',
-        'total_price' => 'decimal:2',
+        'total_ht' => 'decimal:2',
+        'tax_rate' => 'decimal:2',
+        'tax_amount' => 'decimal:2',
+        'total_ttc' => 'decimal:2',
         'quantity' => 'integer'
     ];
+
+    // Boot method pour calculs automatiques
+    protected static function booted()
+    {
+        static::creating(function ($item) {
+            $item->total_ht = $item->quantity * $item->unit_price;
+            $item->tax_amount = $item->total_ht * ($item->tax_rate / 100);
+            $item->total_ttc = $item->total_ht + $item->tax_amount;
+        });
+
+        static::updating(function ($item) {
+            $item->total_ht = $item->quantity * $item->unit_price;
+            $item->tax_amount = $item->total_ht * ($item->tax_rate / 100);
+            $item->total_ttc = $item->total_ht + $item->tax_amount;
+        });
+    }
+
+    // Accesseurs pour compatibilité (si besoin)
+    public function getTotalPriceAttribute()
+    {
+        return $this->total_ttc; // Par défaut, total_price = TTC
+    }
 
     public function order(): BelongsTo
     {
