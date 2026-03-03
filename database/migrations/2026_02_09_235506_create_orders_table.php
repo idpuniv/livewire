@@ -8,8 +8,7 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('invoice_id')->constrained()->cascadeOnDelete();
-            // $table->foreignId('cart_id')->nullable()->constrained()->cascadeOnDelete(); // for order + sale
+            $table->foreignId('checkout_id')->constrained()->cascadeOnDelete();
             $table->enum('status', ['pending', 'confirmed'])->default('pending');
             $table->decimal('amount_paid', 10, 2)->nullable();
             $table->timestamps();

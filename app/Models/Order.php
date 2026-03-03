@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Order extends Model
 {
     protected $fillable = [
-        'invoice_id',
+        'checkout_id',
         'status',
         'amount_paid',
         ];

@@ -29,60 +29,60 @@ class OrderService
                 'status' => 'pending'
             ]);
 
-            $invoice = Invoice::create([
-                'checkout_id' => $checkout->id,
-                'subtotal' => $subtotal,
-                'tax' => $tax,
-                'total' => $total,
-                'status' => 'pending'
-            ]);
-
+            // 1. Créer la commande
             $order = Order::create([
                 'checkout_id' => $checkout->id,
                 'status' => 'pending',
                 'amount_paid' => 0,
-                'invoice_id' => $invoice->id
             ]);
 
-            $this->createOrderItems($order, $invoice, $cart);
-            
+            // 2. Créer les items de commande (SANS invoice)
+            $this->createOrderItems($order, $cart);
+
+            // 3. Créer la facture APRÈS les items (pour avoir les totaux)
+            $invoice = Invoice::create([
+                'order_id' => $order->id,
+                'checkout_id' => $checkout->id,
+                'subtotal' => $order->subtotal, // Utiliser les valeurs de la commande
+                'tax' => $order->tax,
+                'total' => $order->total,
+                'status' => 'pending'
+            ]);
+
+            // 4. Créer les items de facture à partir des order_items
+            $this->createInvoiceItems($invoice, $order);
+
+            // 5. Mettre à jour la commande avec l'invoice_id
+            $order->update(['invoice_id' => $invoice->id]);
 
             return $order;
         });
     }
 
-    private function createOrderItems(Order $order, Invoice $invoice, Cart $cart): void
+    private function createOrderItems(Order $order, Cart $cart): void
     {
         $orderItemsData = [];
-        $invoiceItemsData = [];
 
         foreach ($cart->items as $item) {
             $product = $item->product;
-            $productTotal = $item->quantity * $item->price;
-            $productTax = $productTotal * 0.20;
+            $quantity = $item->quantity;
+            $unitPrice = $item->price;
+            $totalHt = $quantity * $unitPrice;
+            $tvaRate = $product->tva_rate ?? 0;
+            $taxAmount = $totalHt * $tvaRate / 100;
+            $totalTtc = $totalHt + $taxAmount;
 
             $orderItemsData[] = [
                 'order_id' => $order->id,
                 'product_id' => $product->id,
                 'product_name' => $product->name,
                 'product_code' => $product->code,
-                'unit_price' => $item->price,
-                'quantity' => $item->quantity,
-                'total_price' => $productTotal,
-                'created_at' => now(),
-                'updated_at' => now()
-            ];
-
-            $invoiceItemsData[] = [
-                'invoice_id' => $invoice->id,
-                'product_id' => $product->id,
-                'product_name' => $product->name,
-                'product_code' => $product->code,
-                'unit_price' => $item->price,
-                'quantity' => $item->quantity,
-                'total_price' => $productTotal,
-                'tax_rate' => 20.00,
-                'tax_amount' => $productTax,
+                'unit_price' => $unitPrice,
+                'quantity' => $quantity,
+                'total_ht' => $totalHt,
+                'tax_rate' => $tvaRate,
+                'tax_amount' => $taxAmount,
+                'total_ttc' => $totalTtc,
                 'created_at' => now(),
                 'updated_at' => now()
             ];
@@ -91,6 +91,29 @@ class OrderService
         if (!empty($orderItemsData)) {
             OrderItem::insert($orderItemsData);
         }
+    }
+
+    private function createInvoiceItems(Invoice $invoice, Order $order): void
+    {
+        $invoiceItemsData = [];
+
+        foreach ($order->items as $item) {
+            $invoiceItemsData[] = [
+                'invoice_id' => $invoice->id,
+                'product_id' => $item->product_id,
+                'product_name' => $item->product_name,
+                'product_code' => $item->product_code,
+                'unit_price' => $item->unit_price,
+                'quantity' => $item->quantity,
+                'total_ht' => $item->total_ht,
+                'tax_rate' => $item->tax_rate,
+                'tax_amount' => $item->tax_amount,
+                'total_ttc' => $item->total_ttc,
+                'created_at' => now(),
+                'updated_at' => now()
+            ];
+        }
+
         if (!empty($invoiceItemsData)) {
             InvoiceItem::insert($invoiceItemsData);
         }
@@ -98,6 +121,8 @@ class OrderService
 
     public function updateOrderWithExistingCart(Order $order, array $product, int $productId): void
     {
+        $tvaRate = $product['tva_rate'] ?? 0;
+        
         $item = OrderItem::firstOrCreate(
             [
                 'order_id' => $order->id,
@@ -108,12 +133,17 @@ class OrderService
                 'product_code' => $product['code'],
                 'unit_price' => $product['price'],
                 'quantity' => 0,
-                'total_price' => 0,
+                'total_ht' => 0,
+                'tax_rate' => $tvaRate,
+                'tax_amount' => 0,
+                'total_ttc' => 0,
             ]
         );
 
         $item->quantity += 1;
-        $item->total_price = $item->quantity * $item->unit_price;
+        $item->total_ht = $item->quantity * $item->unit_price;
+        $item->tax_amount = $item->total_ht * ($item->tax_rate / 100);
+        $item->total_ttc = $item->total_ht + $item->tax_amount;
         $item->save();
 
         if ($order->invoice) {
@@ -127,15 +157,18 @@ class OrderService
                     'product_code' => $product['code'],
                     'unit_price' => $product['price'],
                     'quantity' => 0,
-                    'total_price' => 0,
-                    'tax_rate' => 20.0,
+                    'total_ht' => 0,
+                    'tax_rate' => $tvaRate,
                     'tax_amount' => 0,
+                    'total_ttc' => 0,
                 ]
             );
 
-            $invoiceItem->quantity += 1;
-            $invoiceItem->total_price = $invoiceItem->quantity * $invoiceItem->unit_price;
-            $invoiceItem->tax_amount = $invoiceItem->total_price * ($invoiceItem->tax_rate / 100);
+            // Synchroniser avec l'order_item
+            $invoiceItem->quantity = $item->quantity;
+            $invoiceItem->total_ht = $item->total_ht;
+            $invoiceItem->tax_amount = $item->tax_amount;
+            $invoiceItem->total_ttc = $item->total_ttc;
             $invoiceItem->save();
         }
     }

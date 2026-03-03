@@ -20,7 +20,6 @@ return new class extends Migration
     $table->decimal('unit_price', 10, 2);
     $table->integer('quantity');
     $table->decimal('total_ht', 10, 2); 
-    $table->decimal('total_price', 10, 2);
     $table->decimal('tax_rate', 5, 2)->default(00.00); // TVA 20%
     $table->decimal('tax_amount', 10, 2);
     $table->decimal('total_ttc', 10, 2);  

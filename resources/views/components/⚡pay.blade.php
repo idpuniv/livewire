@@ -35,7 +35,8 @@ new class() extends Component {
         'loadOrder'  => 'loadOrder',
         'cartUpdated' => 'refreshCart',
         'resetPaymentStatus' => 'resetPaymentStatus',
-        'orderCreated' => 'handleOrderCreated'
+        'orderCreated' => 'handleOrderCreated',
+        'orderUpdated' => 'loadOrder', // ← AJOUTE CET ÉCOUTEUR
     ];
 
     public function mount(?Order $order = null, ?Cart $cart = null): void
@@ -152,28 +153,37 @@ new class() extends Component {
                 return;
             }
 
-            // Utiliser CheckoutService pour créer ET payer en une transaction
-            $result = $this->checkoutService->createOrderAndPay(
-                $this->cart,
-                floatval($this->amountPaid ?? 0),
-                $this->paymentMethod
-            );
+            try {
+                // Utiliser CheckoutService pour créer ET payer en une transaction
+                $result = $this->checkoutService->createOrderAndPay(
+                    $this->cart,
+                    floatval($this->amountPaid ?? 0),
+                    $this->paymentMethod
+                );
 
-            if ($result['success']) {
-                $this->paymentStatus = 'success';
-                
-                $this->dispatch('clearCart2');
-                $this->order = null;
-                $this->cart = null;
-                $this->syncAmounts();
+                Log::info('Résultat checkout', $result);
 
-                session()->flash('success', $result['message']);
-                $this->dispatch('startTimer');
-                
-            } else {
+                if ($result['success']) {
+                    $this->paymentStatus = 'success';
+                    
+                    $this->dispatch('clearCart2');
+                    $this->order = null;
+                    $this->cart = null;
+                    $this->syncAmounts();
+
+                    session()->flash('success', $result['message']);
+                    $this->dispatch('startTimer');
+                    
+                } else {
+                    $this->paymentStatus = 'error';
+                    session()->flash('error', $result['message']);
+                    $this->dispatch('startTimer');
+                }
+            } catch (\Exception $e) {
+                Log::error('Exception dans pay(): ' . $e->getMessage());
+                Log::error($e->getTraceAsString());
                 $this->paymentStatus = 'error';
-                session()->flash('error', $result['message']);
-                $this->dispatch('startTimer');
+                session()->flash('error', 'Erreur: ' . $e->getMessage());
             }
             
             return;
@@ -189,31 +199,43 @@ new class() extends Component {
             return;
         }
 
-        $result = $this->paymentService->processPayment(
-            $this->order,
-            floatval($this->amountPaid ?? 0),
-            $this->paymentMethod
-        );
+        try {
+            $result = $this->paymentService->processPayment(
+                $this->order,
+                floatval($this->amountPaid ?? 0),
+                $this->paymentMethod
+            );
 
-        if ($result['success']) {
-            $this->paymentStatus = 'success';
-            $this->dispatch('showMobileReceipt');
-            
-            $this->dispatch('clearCart2');
-            $this->order = null;
-            $this->cart = null;
-            $this->syncAmounts();
+            Log::info('Résultat processPayment', $result);
 
-            $this->dispatch('paymentStatus', status: 'success');
+            if ($result['success']) {
+                $this->paymentStatus = 'success';
+                $this->dispatch('showMobileReceipt');
+                
+                // Recharger la commande pour avoir les dernières infos
+                $this->order = Order::with(['items', 'invoice'])->find($this->order->id);
+                
+                $this->dispatch('clearCart2');
+                $this->order = null;
+                $this->cart = null;
+                $this->syncAmounts();
 
-            session()->flash('success', $result['message']);
-            $this->dispatch('startTimer');
-            
-        } else {
+                $this->dispatch('paymentStatus', status: 'success');
+
+                session()->flash('success', $result['message']);
+                $this->dispatch('startTimer');
+                
+            } else {
+                $this->paymentStatus = 'error';
+                $this->dispatch('paymentStatus', status: 'error');
+                session()->flash('error', $result['message']);
+                $this->dispatch('startTimer');
+            }
+        } catch (\Exception $e) {
+            Log::error('Exception dans processPayment(): ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
             $this->paymentStatus = 'error';
-            $this->dispatch('paymentStatus', status: 'error');
-            session()->flash('error', $result['message']);
-            $this->dispatch('startTimer');
+            session()->flash('error', 'Erreur: ' . $e->getMessage());
         }
     }
     
@@ -223,7 +245,6 @@ new class() extends Component {
         $this->dispatch('paymentStatus', status: null);
     }
 };
-
 ?>
 
 <div class="card border-0 shadow-sm rounded-10 h-100">
