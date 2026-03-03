@@ -295,8 +295,7 @@ public function updatedTvaInputMode($mode)
     <!-- Header -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
         <div class="mb-3 mb-md-0">
-            <h1 class="h2 fw-bold text-primary mb-1">Gestion des Produits</h1>
-            <p class="text-muted mb-0">Créez, modifiez et gérez vos produits</p>
+            <h1 class="h2 fw-bold text-white mb-1">Gestion des Produits</h1>
         </div>
         <button class="btn btn-primary d-flex align-items-center shadow-sm" wire:click="openModal()">
             <i class="bi bi-plus-circle me-2"></i>

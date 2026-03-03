@@ -540,42 +540,48 @@ new class () extends Component {
 
                 <!-- Footer -->
                 <div class="product-footer-custom mt-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="text-muted">{{ count($this->filteredProducts) }} produits</span>
-                            <span class="mx-2">•</span>
-                            <span class="fw-bold text-primary">{{ $this->selectedCount }} sélectionnés</span>
-                            <span class="mx-2">•</span>
-                            <span class="fw-bold text-success">
-                                Total: {{ number_format($this->cartTotal, 2) }}
-                            </span>
-                        </div>
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <span class="text-muted">{{ count($this->filteredProducts) }} produits</span>
+            <span class="mx-2">•</span>
+            <span class="fw-bold text-primary">{{ $this->selectedCount }} sélectionnés</span>
+            <span class="mx-2">•</span>
+            <span class="fw-bold text-success">
+                Total: {{ number_format($this->cartTotal, 2) }}
+            </span>
+        </div>
 
-                        <div class="d-flex gap-2">
-                            <!-- Desktop : toujours afficher Créer (désactivé si order existe) -->
-                            <button class="btn btn-primary btn-sm d-none d-md-block"
-                                wire:click="createCheckout"
-                                @if($order) disabled @endif>
-                                Créer la commande
-                            </button>
+        <div class="d-flex gap-2">
+            <!-- Desktop : bouton Créer (plus tard : condition avec permission) -->
+            <button class="btn btn-primary btn-sm d-none d-md-block"
+                wire:click="createCheckout"
+                @if($order) disabled @endif>
+                Créer la commande
+            </button>
 
-                            <!-- Mobile : afficher Créer OU Payer, jamais les deux -->
-                            @if(!$order)
-                            <button class="btn btn-primary btn-sm d-md-none"
-                                wire:click="createCheckout">
-                                Créer la commande
-                            </button>
-                            @else
-                            <button class="btn btn-success d-md-none btn-sm" type="button"
-                                data-bs-toggle="offcanvas"
-                                data-bs-target="#offcanvasPay">
-                                <i class="fas fa-credit-card me-1"></i>
-                                Payer #{{ $order->id }}
-                            </button>
-                            @endif
-                        </div>
-                    </div>
-                </div>
+            <!-- Mobile : structure préparée pour les permissions -->
+            <div class="d-md-none d-flex gap-2">
+                <!-- Bouton Créer commande (toujours visible sur mobile pour l'instant) -->
+                <button class="btn btn-primary btn-sm"
+                    wire:click="createCheckout">
+                    <i class="fas fa-plus-circle me-1"></i>
+                    Créer
+                </button>
+
+                <!-- Bouton Payer - NE SERA AFFICHÉ QUE SI UNE COMMANDE EXISTE 
+                     (Plus tard on ajoutera && $canPay) -->
+                @if($order)
+                <button class="btn btn-success btn-sm" type="button"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#offcanvasPay">
+                    <i class="fas fa-credit-card me-1"></i>
+                    Payer
+                </button>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
 
                 <!-- MODAL POUR MODIFIER LA QUANTITÉ - COMPLET -->
                 @if($showQuantityModal)
