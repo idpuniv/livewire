@@ -14,13 +14,25 @@ class UserSeeder extends Seeder
     {
         $users = [
             [
+                'email' => 'user1@email.com',
+                'name' => 'user1',
+                'password' => 'user1',
+            ],
+             [
+                'email' => 'user2@email.com',
+                'name' => 'user2',
+                'password' => 'user2',
+            ],
+            [
                 'email' => 'admin@example.com',
                 'name' => 'Admin',
+                'password' => 'admin',
                 'role' => Roles::ADMIN
             ],
             [
                 'email' => 'cashier@example.com',
                 'name' => 'Caissier',
+                'password' => 'cashier',
                 'role' => Roles::CASHIER
             ],
         ];
@@ -30,7 +42,7 @@ class UserSeeder extends Seeder
                 ['email' => $userData['email']],
                 [
                     'name' => $userData['name'],
-                    'password' => Hash::make('password'),
+                    'password' => Hash::make($userData['password'] ?? 'password'),
                 ]
             );
 

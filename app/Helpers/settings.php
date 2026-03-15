@@ -3,6 +3,9 @@
 if (!function_exists('setting')) {
     function setting($key, $default = null)
     {
-        return \App\Models\Setting::get($key, $default);
+        $userId = auth()->id();
+        $settings = cache()->get('settings_user_' . $userId, []);
+
+        return $settings[$key] ?? $default;
     }
 }
