@@ -1,62 +1,66 @@
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ $title ?? config('app.name') }}</title>
+    <title>{{ config('app.name', 'Laravel') }}</title>
 
-    <!-- Bootstrap CSS via Cloudflare CDN (cdnjs) -->
-    <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Bootstrap CSS (Cloudflare) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
 
-    <!-- Bootstrap Icons via Cloudflare CDN -->
-    <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css"
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
-    <!-- Font Awesome via Cloudflare CDN -->
-    <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
-
-    <!-- Tes CSS et JS via Vite -->
+    <!-- Scripts -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-
-    <!-- Livewire Styles -->
-    @livewireStyles
-
-    <link rel="stylesheet" href="{{ asset('css/layout.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/produit.css') }}">
 </head>
-
-<body class="bg-light">
-
-    <div class="px-0 px-md-3">
-        <!-- Messages de succès -->
-        @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            {{ session('success') }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                {{ config('app.name', 'Laravel') }}
+            </a>
+            
+            <div class="ms-auto">
+                @if (Route::has('login'))
+                    @auth
+                        <a href="{{ url('/dashboard') }}" class="btn btn-outline-secondary me-2">Dashboard</a>
+                        <form method="POST" action="{{ route('logout') }}" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-danger">Déconnexion</button>
+                        </form>
+                    @else
+                        <a href="{{ route('login') }}" class="btn btn-outline-primary me-2">Connexion</a>
+                        @if (Route::has('register'))
+                            <a href="{{ route('register') }}" class="btn btn-primary">Inscription</a>
+                        @endif
+                    @endauth
+                @endif
+            </div>
         </div>
-        @endif
+    </nav>
 
-        <!-- Slot Livewire / Contenu de la page -->
-        {{ $slot }}
-    </div>
+    <!-- Page Heading -->
+    @isset($header)
+        <div class="bg-white shadow-sm">
+            <div class="container py-4">
+                {{ $header }}
+            </div>
+        </div>
+    @endisset
 
-    <!-- Bootstrap JS Bundle via Cloudflare CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- Page Content -->
+    <main class="py-4">
+        <div class="container">
+            {{ $slot }}
+        </div>
+    </main>
 
-
-
-
-    <!-- Livewire Scripts -->
-    @livewireScripts
-
+    <!-- Bootstrap JS (optionnel pour les composants interactifs) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 </body>
-
 </html>

@@ -4,30 +4,52 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Setting;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class SettingController extends Controller
 {
     /**
-     * Afficher tous les settings
+     * Afficher tous les settings (depuis la config déjà chargée)
      */
     public function index()
-    {
-        // Récupère tous les settings de la BD
-        $settings = Setting::orderBy('key')->get();
-        
-        // Récupère les groupes depuis la config
-        $groups = config('settings.groups', []);
-        
-        // Prépare toutes les configurations des champs pour la vue
-        $fieldsConfig = [];
-        foreach ($groups as $groupKey => $group) {
-            foreach ($group['fields'] as $fieldKey) {
-                $fieldsConfig[$fieldKey] = config("settings.fields.{$fieldKey}", []);
-            }
+{
+    $userId = Auth::id();
+    $cacheKey = "user_settings_{$userId}";
+    
+    // Récupère les settings du cache
+    $userSettings = Cache::get($cacheKey, []);
+    
+    // Récupère les groupes depuis la config
+    $groups = config('settings.groups', []);
+    
+    // Prépare les configurations des champs
+    $fieldsConfig = [];
+    foreach ($groups as $groupKey => $group) {
+        foreach ($group['fields'] as $fieldKey) {
+            $fieldsConfig[$fieldKey] = config("settings.fields.{$fieldKey}", []);
         }
-        
-        return view('settings.index', compact('settings', 'groups', 'fieldsConfig'));
     }
+    
+    // Crée la collection de settings avec les valeurs du cache
+    $settings = collect();
+    foreach ($groups as $group) {
+        foreach ($group['fields'] as $fieldKey) {
+            $setting = new Setting();
+            $setting->key = $fieldKey;
+            
+            // Priorité : cache > config
+            $setting->value = $userSettings[$fieldKey] ?? config("settings.{$fieldKey}");
+            
+            // Vérifie si c'est une valeur personnalisée
+            $setting->user_id = array_key_exists($fieldKey, $userSettings) ? $userId : null;
+            
+            $settings->push($setting);
+        }
+    }
+    
+    return view('settings.index', compact('settings', 'groups', 'fieldsConfig'));
+}
 
     /**
      * Mettre à jour un setting
@@ -39,6 +61,7 @@ class SettingController extends Controller
             'value' => 'nullable',
         ]);
 
+        $userId = Auth::id();
         $key = $request->input('key');
         $value = $request->input('value');
 
@@ -47,53 +70,46 @@ class SettingController extends Controller
             $value = '0';
         }
 
-        // Pour tester : user_id = null (global)
-        Setting::set($key, $value, null);
+        // Sauvegarde en BD
+        Setting::updateOrCreate(
+            ['key' => $key, 'user_id' => $userId],
+            ['value' => $value]
+        );
+
+        // Met à jour le cache
+        $cacheKey = "user_settings_{$userId}";
+        $userSettings = Cache::get($cacheKey, []);
+        $userSettings[$key] = $value;
+        Cache::put($cacheKey, $userSettings, 3600);
+        
+        // Met à jour la config pour cette requête
+        config(["settings.{$key}" => $value]);
 
         return redirect()->back()->with('success', "Le paramètre a été mis à jour !");
     }
 
     /**
-     * Mettre à jour plusieurs settings à la fois
-     */
-    public function updateGroup(Request $request)
-    {
-        $request->validate([
-            'settings' => 'required|array',
-        ]);
-
-        $settings = $request->input('settings');
-        
-        foreach ($settings as $key => $value) {
-            Setting::set($key, $value, null);
-        }
-
-        return redirect()->back()->with('success', "Les paramètres ont été mis à jour !");
-    }
-
-    /**
-     * Réinitialiser un setting (supprime la valeur personnalisée)
+     * Réinitialiser un setting
      */
     public function reset($key)
     {
-        Setting::remove($key, null);
+        $userId = Auth::id();
         
-        return redirect()->back()->with('success', "Le paramètre a été réinitialisé !");
-    }
+        // Supprime de la BD
+        Setting::where('key', $key)
+            ->where('user_id', $userId)
+            ->delete();
+        
+        // Met à jour le cache
+        $cacheKey = "user_settings_{$userId}";
+        $userSettings = Cache::get($cacheKey, []);
+        unset($userSettings[$key]);
+        Cache::put($cacheKey, $userSettings, 3600);
+        
+        // Remet la valeur par défaut dans la config
+        $defaultValue = config("settings.defaults.{$key}") ?? config("settings.{$key}");
+        config(["settings.{$key}" => $defaultValue]);
 
-    /**
-     * Afficher les détails d'un setting
-     */
-    public function show($key)
-    {
-        $setting = Setting::where('key', $key)->first();
-        $value = $setting ? $setting->value : config("settings.{$key}");
-        $config = config("settings.fields.{$key}", []);
-        
-        return response()->json([
-            'key' => $key,
-            'value' => $value,
-            'config' => $config
-        ]);
+        return redirect()->back()->with('success', "Le paramètre a été réinitialisé !");
     }
 }

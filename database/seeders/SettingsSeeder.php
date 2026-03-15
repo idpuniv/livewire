@@ -9,17 +9,18 @@ class SettingsSeeder extends Seeder
 {
     public function run(): void
     {
-        // Charger le fichier config/settings.php
-        $configSettings = config('settings', []);
+        // Récupère toutes les clés du fichier de config SAUF fields et groups
+        $config = collect(config('settings'))
+            ->except(['fields', 'groups'])
+            ->toArray();
 
-        foreach ($configSettings as $key => $value) {
-            // Créer ou mettre à jour le setting global (user_id = null)
+        foreach ($config as $key => $value) {
             Setting::updateOrCreate(
                 ['key' => $key, 'user_id' => null],
-                ['value' => is_array($value) ? json_encode($value) : $value]
+                ['value' => $value]
             );
         }
 
-        $this->command->info('Settings from config/settings.php seeded successfully.');
+        $this->command->info('Settings seeded successfully.');
     }
 }
