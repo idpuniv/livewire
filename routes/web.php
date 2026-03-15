@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\SettingController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -17,6 +18,9 @@ Route::livewire('/users2', 'pages::users.create2');
 Route::get('/products/list', function () {
     return view('products');
 });
+
+Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+Route::post('/settings/update', [SettingController::class, 'update'])->name('settings.update');
 
 
 
