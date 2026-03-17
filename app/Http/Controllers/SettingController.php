@@ -14,12 +14,22 @@ class SettingController extends Controller
      */
     public function index()
     {
-        $groups = config('settings.groups', []);
+        $allGroups = config('settings.groups', []);
         $fieldsConfig = config('settings.fields', []);
 
-        $userId = Auth::id();
-        // On récupère les settings du user depuis le cache (préparé par le provider)
-        $settings = Cache::get('settings_user_' . $userId, []);
+        $user = Auth::user();
+        $isAdmin = $user->is_admin; // Admin = false
+
+        // Filtrer les groupes : cacher le groupe 'system' si pas admin
+        $groups = array_filter($allGroups, function($groupKey) use ($isAdmin) {
+            if ($groupKey === 'system' && !$isAdmin) {
+                return false;
+            }
+            return true;
+        }, ARRAY_FILTER_USE_KEY);
+
+        // Récupère les settings du user depuis le cache
+        $settings = Cache::get('settings_user_' . $user->id, []);
 
         return view('settings.index', compact('groups', 'fieldsConfig', 'settings'));
     }
@@ -31,20 +41,18 @@ class SettingController extends Controller
     {
         $key = $request->input('key');
         $value = $request->input('value');
-        $userId = Auth::id();
+        $user = Auth::user();
 
-        $isAdmin = true; // À remplacer par la vraie vérif admin
+        $isAdmin = $user->is_admin;
 
-        // Protection : seuls les admins peuvent modifier les settings system
         if (str_starts_with($key, 'system') && !$isAdmin) {
             abort(403, 'Paramètre système interdit.');
         }
 
-        // Crée ou met à jour le paramètre pour l'utilisateur courant
         Setting::updateOrCreate(
             [
                 'key' => $key,
-                'user_id' => $userId
+                'user_id' => $user->id
             ],
             [
                 'value' => $value,
@@ -52,9 +60,7 @@ class SettingController extends Controller
             ]
         );
 
-        // On vide le cache pour forcer le provider à régénérer les settings
-        Cache::forget("settings_user_$userId");
-        Cache::forget("settings_system");
+        Cache::forget("settings_user_$user->id");
 
         return back()->with('success', 'Paramètre mis à jour.');
     }

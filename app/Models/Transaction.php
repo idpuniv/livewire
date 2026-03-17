@@ -23,7 +23,7 @@ class Transaction extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'gateway_response' => 'array',
-        'metadata' => 'array'
+        'metadata' => 'array',
     ];
 
     // Constantes pour les types de transaction

@@ -4,10 +4,7 @@ namespace App\Roles;
 
 use App\Permissions\OrderPermissions;
 use App\Permissions\PaymentPermissions;
-use App\Permissions\ProductPermissions;
-use App\Permissions\UserPermissions;
 use App\Permissions\SystemPermissions;
-use App\Permissions\ReportPermissions;
 
 final class Roles
 {
@@ -20,11 +17,15 @@ final class Roles
             self::ADMIN => [
                 'label' => 'Administrateur',
                 'permissions' => [
+                    ...SystemPermissions::all(),
                     OrderPermissions::CREATE,
                     OrderPermissions::VIEW,
                     OrderPermissions::UPDATE,
                     OrderPermissions::DELETE,
+                    PaymentPermissions::CREATE,
                     PaymentPermissions::VIEW,
+                    PaymentPermissions::UPDATE,
+                    PaymentPermissions::DELETE,
                 ]
             ],
             

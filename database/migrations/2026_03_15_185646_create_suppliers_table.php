@@ -11,12 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('customers', function (Blueprint $table) {
+        Schema::create('suppliers', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('person_id')->constrained()->onDelete('cascade');
-            $table->string('customer_number')->unique();
-            $table->decimal('credit_limit', 10, 2)->nullable();
-            $table->string('payment_terms')->nullable();
+            $table->foreignId('people_id')->constrained()->onDelete('cascade');
+            $table->string('supplier_number')->unique();
+            $table->string('company_name')->nullable();
+            $table->string('tax_number')->nullable();
             $table->timestamps();
         });
     }
@@ -26,6 +26,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('customers');
+        Schema::dropIfExists('suppliers');
     }
 };

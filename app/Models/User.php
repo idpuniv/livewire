@@ -6,7 +6,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasRoles; // ← Import du trait HasRoles
 
 class User extends Authenticatable
@@ -53,6 +52,11 @@ class User extends Authenticatable
     public function contacts()
     {
         return $this->hasMany(Contact::class);
+    }
+
+    public function getIsAdminAttribute(): bool
+    {
+      return $this->hasRole(\App\Roles\Roles::ADMIN);
     }
 
 }

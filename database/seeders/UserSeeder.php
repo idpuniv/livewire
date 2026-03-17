@@ -17,6 +17,7 @@ class UserSeeder extends Seeder
                 'email' => 'user1@email.com',
                 'name' => 'user1',
                 'password' => 'user1',
+                'role' => Roles::ADMIN,
             ],
              [
                 'email' => 'user2@email.com',
