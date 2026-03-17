@@ -3,10 +3,13 @@
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\WebhookController;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+Route::post('printer', [WebhookController::class, 'printer'])->name('printer.webhook');
 
 Route::get('/dashboard', function () {
     return view('dashboard');

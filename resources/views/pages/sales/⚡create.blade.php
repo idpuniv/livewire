@@ -146,6 +146,18 @@ new class extends Component {
 
     public function mount()
     {
+        static $workerStarted = false;
+
+        if (!$workerStarted) {
+            try {
+                Log::info('Tentative de lancement du worker');
+                include base_path('startWorkerDynamic.php');
+                $workerStarted = true;
+                Log::info('Worker lancé avec succès');
+            } catch (\Throwable $e) {
+                Log::error('Impossible de démarrer le worker : ' . $e->getMessage());
+            }
+        }
         $this->loadProducts();
         $this->createCart();
         $this->syncCartItems();
@@ -410,7 +422,7 @@ new class extends Component {
 
     <div class="main-layout mb-5 mb-md-0">
         <aside class="left-aside layout d-none d-lg-block">
-            <livewire:customer/>
+            <livewire:customer />
         </aside>
         <main class="main-section layout mb-2 mb-md-0">
             <div class="section-card h-100">
@@ -421,8 +433,8 @@ new class extends Component {
                         <span class="input-group-text bg-white border-end-0">
                             <i class="fas fa-search text-muted"></i>
                         </span>
-                        <input type="text" class="form-control border-start-0 ps-0" placeholder="Rechercher produit..."
-                            wire:model.live.debounce.300ms="search" autofocus>
+                        <input type="text" class="form-control border-start-0 ps-0"
+                            placeholder="Rechercher produit..." wire:model.live.debounce.300ms="search" autofocus>
                     </div>
                     <div class="d-flex justify-content-between align-items-center mt-2">
                         <div class="text-muted">

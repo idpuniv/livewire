@@ -6,7 +6,6 @@ use App\Models\Order;
 use App\Models\Cart; // Importer le bon modèle
 use App\Models\Payment;
 use App\Models\Transaction;
-use App\Models\Invoice;
 use App\Enums\Status;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;

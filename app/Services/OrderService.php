@@ -8,10 +8,8 @@ use App\Models\OrderItem;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Checkout;
-use App\Models\Product;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
-use App\Enums\Status;
 
 class OrderService
 {

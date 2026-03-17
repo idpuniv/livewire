@@ -3,17 +3,7 @@
 namespace App\Services;
 
 use App\Models\Cart;
-use App\Models\Order;
-use App\Models\Payment;
-use App\Models\Transaction;
-use App\Models\Invoice;
-use App\Models\Checkout;
-use App\Models\OrderItem;
-use App\Models\InvoiceItem;
-use App\Enums\Status;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
-use App\Events\PaymentCompleted;
 
 class CheckoutService
 {
@@ -33,8 +23,6 @@ class CheckoutService
      */
     public function createOrderAndPay(Cart $cart, float $amountPaid, string $paymentMethod): array
     {
-        // Vérification du montant
-        // dd($cart->total); // j ai une valeur
         if ($paymentMethod === 'cash' && $amountPaid < $cart->total) {
             return [
                 'success' => false,
@@ -45,12 +33,7 @@ class CheckoutService
 
         try {
             return DB::transaction(function () use ($cart, $amountPaid, $paymentMethod) {
-                // 1. Créer la commande
-                // dd($cart->total); // j ai une valeur
                 $order = $this->orderService->createOrderFromCart($cart);
-                // dd($order->total); j ai une valeur
-                
-                // 2. Payer la commande
                 $paymentResult = $this->paymentService->processPayment(
                     $order,
                     $amountPaid,

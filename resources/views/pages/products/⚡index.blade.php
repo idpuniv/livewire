@@ -164,6 +164,7 @@ public function updatedTvaInputMode($mode)
         $this->selectedProducts = [];
         $this->selectAll = false;
         $this->selectedBulkAction = '';
+        
     }
 
     public function clearSelection()
@@ -350,6 +351,7 @@ public function updatedTvaInputMode($mode)
                                     <input class="form-check-input"
                                         type="checkbox" 
                                         wire:model.live="selectAll"
+                                        wire:key="select-all-checkbox-{{ count($selectedProducts) }}"
                                         id="selectAll">
                                 </div>
                             </th>
@@ -403,10 +405,10 @@ public function updatedTvaInputMode($mode)
                             <td class="py-3 px-4">
                                 <div class="form-check">
                                     <input class="form-check-input" 
-                                        type="checkbox"
-                                        value="{{ $product->id }}"
-                                        wire:model.live="selectedProducts"
-                                        wire:key="checkbox-{{ $product->id }}">
+    type="checkbox"
+    value="{{ $product->id }}"
+    wire:model.live="selectedProducts"
+    wire:key="checkbox-{{ $product->id }}-{{ in_array($product->id, $selectedProducts) ? 'checked' : 'unchecked' }}-{{ rand() }}">
                                 </div>
                             </td>
 

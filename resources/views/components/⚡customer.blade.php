@@ -315,16 +315,20 @@ new class extends Component {
 
     public function getSelectedPersonProperty()
     {
+        // Si on n'a pas d'ID sélectionné, on ne retourne rien
         if (!$this->selectedPersonId) {
             return null;
         }
 
-        foreach ($this->people as $person) {
-            if ($person['id'] == $this->selectedPersonId) {
-                return $person;
-            }
-        }
-        return null;
+        // Retourne les données actuelles
+        return [
+            'id'        => $this->selectedPersonId,
+            'name'      => $this->name,
+            'firstname' => $this->firstname,
+            'phone'     => $this->phone,
+            'email'     => $this->email,
+            'cnib'      => $this->cnib,
+        ];
     }
 
     public function getTitleProperty()
@@ -432,11 +436,11 @@ new class extends Component {
                 </button>
                 @if ($this->selectedPerson)
                     <button type="button" class="btn btn-outline-primary"
-                        wire:click="editPerson({{ $this->selectedPerson['id'] }})">
+                        wire:click="editPerson({{ $selectedPersonId }})">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button type="button" class="btn btn-outline-info"
-                        wire:click="viewPersonDetails({{ $this->selectedPerson['id'] }})">
+                        wire:click="viewPersonDetails({{ $selectedPersonId }})">
                         <i class="fas fa-eye"></i>
                     </button>
                 @endif
@@ -450,7 +454,7 @@ new class extends Component {
                     </label>
                     <div class="d-flex flex-wrap gap-2">
                         @foreach ($pinnedCustomers as $pinned)
-                            <div class="pinned-item d-flex align-items-center gap-2 p-2 rounded border"
+                            <div wire:key="pinned-customer-{{ $pinned['id'] }}" class="pinned-item d-flex align-items-center gap-2 p-2 rounded border"
                                 style="cursor:pointer; background-color: {{ $selectedPersonId == $pinned['id'] ? '#d4edda' : '#f8f9fa' }}; border-color: #dee2e6;"
                                 wire:click="selectPerson({{ $pinned['id'] }})"
                                 title="{{ $pinned['firstname'] }} {{ $pinned['name'] }} - {{ $pinned['phone'] }}">
@@ -468,58 +472,103 @@ new class extends Component {
                 </div>
             @endif
         @else
-            <!-- FORMULAIRE -->
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0">
-                    @if ($viewMode)
-                        <span class="badge bg-info">Détails</span>
-                    @elseif($this->selectedPerson)
-                        <span class="badge bg-success">Modification</span>
-                    @else
-                        <span class="badge bg-primary">Nouveau</span>
-                    @endif
-                </h6>
-                <button type="button" class="btn btn-sm btn-outline-secondary" wire:click="newSearch">
-                    <i class="fas fa-arrow-left me-1"></i> Retour
-                </button>
-            </div>
-
-            <form wire:submit.prevent="savePerson">
-                <div class="mb-3">
-                    <label class="form-label">Nom *</label>
-                    <input type="text" class="form-control" wire:model.live="name"
-                        {{ $viewMode ? 'readonly' : '' }}>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Prénom *</label>
-                    <input type="text" class="form-control" wire:model.live="firstname"
-                        {{ $viewMode ? 'readonly' : '' }}>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Téléphone *</label>
-                    <input type="text" class="form-control" wire:model.live="phone"
-                        {{ $viewMode ? 'readonly' : '' }}>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">CNIB</label>
-                    <input type="text" class="form-control" wire:model="cnib" {{ $viewMode ? 'readonly' : '' }}>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input type="email" class="form-control" wire:model="email" {{ $viewMode ? 'readonly' : '' }}>
-                </div>
-
-                @if (!$viewMode)
-                    <button type="submit" class="btn btn-primary w-100"
-                        @if (empty($name) || empty($firstname) || empty($phone)) disabled @endif>
-                        @if ($personId)
-                            Mettre à jour
+            <!-- DÉTAILS OU FORMULAIRE -->
+            <div wire:key="customer-section-{{ $selectedPersonId ?? 'new' }}-{{ $viewMode ? 'details' : 'form' }}">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">
+                        @if ($viewMode)
+                            <span class="badge bg-info">Détails</span>
+                        @elseif($this->selectedPerson)
+                            <span class="badge bg-success">Modification</span>
                         @else
-                            Enregistrer
+                            <span class="badge bg-primary">Nouveau</span>
                         @endif
+                    </h6>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" wire:click="newSearch">
+                        <i class="fas fa-arrow-left me-1"></i> Retour
                     </button>
+                </div>
+
+                @if ($viewMode)
+                    <!-- MODE DÉTAILS - Affichage seul -->
+                    <div class="details-view" wire:key="details-{{ $selectedPersonId }}">
+                        <div class="text-center mb-4">
+                            <div class="bg-light rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                                style="width: 100px; height: 100px;">
+                                <i class="fas fa-user-circle fa-4x text-primary"></i>
+                            </div>
+                            <h4>{{ $name }} {{ $firstname }}</h4>
+                            <span class="badge bg-{{ $type === 'customer' ? 'primary' : 'info' }}">
+                                {{ $type === 'customer' ? 'Client' : 'Vendeuse' }}
+                            </span>
+                        </div>
+
+                        <div class="bg-light p-3 rounded-3 mb-4">
+                            <div class="d-flex justify-content-between py-2 border-bottom">
+                                <span class="text-muted">Téléphone</span>
+                                <span class="fw-bold">{{ $phone }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between py-2 border-bottom">
+                                <span class="text-muted">Email</span>
+                                <span class="fw-bold">{{ $email ?: 'Non renseigné' }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between py-2 border-bottom">
+                                <span class="text-muted">CNIB</span>
+                                <span class="fw-bold">{{ $cnib ?: 'Non renseigné' }}</span>
+                            </div>
+                            @if ($type === 'customer' && $customerId)
+                                <div class="d-flex justify-content-between py-2">
+                                    <span class="text-muted">N° Client</span>
+                                    <span class="fw-bold">#{{ str_pad($customerId, 5, '0', STR_PAD_LEFT) }}</span>
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-primary flex-grow-1"
+                                wire:click="editPerson({{ $selectedPersonId }})">
+                                <i class="fas fa-edit me-1"></i> Modifier
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary flex-grow-1" wire:click="newSearch">
+                                <i class="fas fa-check me-1"></i> OK
+                            </button>
+                        </div>
+                    </div>
+                @else
+                    <!-- MODE FORMULAIRE (Création/Modification) -->
+                    <form wire:submit.prevent="savePerson" wire:key="form-{{ $selectedPersonId ?? 'new' }}">
+                        <div class="mb-3">
+                            <label class="form-label">Nom *</label>
+                            <input type="text" class="form-control" wire:model.live="name">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prénom *</label>
+                            <input type="text" class="form-control" wire:model.live="firstname">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Téléphone *</label>
+                            <input type="text" class="form-control" wire:model.live="phone">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">CNIB</label>
+                            <input type="text" class="form-control" wire:model="cnib">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" wire:model="email">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100"
+                            @if (empty($name) || empty($firstname) || empty($phone)) disabled @endif>
+                            @if ($personId)
+                                Mettre à jour
+                            @else
+                                Enregistrer
+                            @endif
+                        </button>
+                    </form>
                 @endif
-            </form>
+            </div>
         @endif
     </div>
 
