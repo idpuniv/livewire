@@ -3,12 +3,8 @@
 use Livewire\Component;
 use App\Models\Person;
 use App\Models\Customer;
-use App\Models\Employee;
-use App\Models\Position;
 
 new class extends Component {
-    public $type = 'customer';
-
     // Champs du formulaire
     public $phone = '';
     public $name = '';
@@ -17,7 +13,6 @@ new class extends Component {
     public $email = '';
     public $personId = null;
     public $customerId = null;
-    public $employeeId = null;
     public $searchMode = true;
     public $viewMode = false;
 
@@ -27,133 +22,94 @@ new class extends Component {
     public $dropdownOpen = false;
     public $selectedPersonId = null;
 
+    // Dans le composant enfant (customer)
+    protected $listeners = [
+        'clearCustomerSelection' => 'resetSelection',
+        'clearCustomerFromPay' => 'resetSelection',
+    ];
+
+    public function resetSelection()
+    {
+        $this->selectedPersonId = null;
+        $this->personId = null;
+        $this->customerId = null;
+        $this->name = '';
+        $this->firstname = '';
+        $this->phone = '';
+        $this->email = '';
+        $this->cnib = '';
+        $this->searchMode = true;
+        $this->viewMode = false;
+        $this->dropdownOpen = false;
+        $this->personSearch = '';
+
+        // Recharger les listes
+        $this->loadPeople();
+        $this->loadPinnedCustomers();
+    }
+
     // Pour les clients épinglés
     public $pinnedCustomers = [];
 
-    public function mount($type = 'customer')
+    public function mount()
     {
-        $this->type = $type;
         $this->loadPeople();
         $this->loadPinnedCustomers();
     }
 
     public function loadPinnedCustomers()
     {
-        if ($this->type === 'customer') {
-            // Récupère les 5 derniers clients
-            $this->pinnedCustomers = Customer::with('person')
-                ->whereHas('person')
-                ->latest()
-                ->limit(5)
-                ->get()
-                ->filter(fn($c) => $c->person)
-                ->map(
-                    fn($c) => [
-                        'id' => $c->id,
-                        'person_id' => $c->person->id,
-                        'name' => $c->person->name,
-                        'firstname' => $c->person->firstname,
-                        'phone' => $c->person->phone,
-                        'initials' => strtoupper(substr($c->person->firstname, 0, 1) . substr($c->person->name, 0, 1)),
-                    ],
-                )
-                ->values()
-                ->toArray();
-        } else {
-            $vendeusePosition = Position::where('slug', 'vendeuse')->first();
-            if ($vendeusePosition) {
-                $this->pinnedCustomers = Employee::with('person')
-                    ->where('position_id', $vendeusePosition->id)
-                    ->whereHas('person')
-                    ->latest()
-                    ->limit(5)
-                    ->get()
-                    ->filter(fn($e) => $e->person)
-                    ->map(
-                        fn($e) => [
-                            'id' => $e->id,
-                            'person_id' => $e->person->id,
-                            'name' => $e->person->name,
-                            'firstname' => $e->person->firstname,
-                            'phone' => $e->person->phone,
-                            'initials' => strtoupper(substr($e->person->firstname, 0, 1) . substr($e->person->name, 0, 1)),
-                        ],
-                    )
-                    ->values()
-                    ->toArray();
-            }
-        }
+        // Récupère les 5 derniers clients
+        $this->pinnedCustomers = Customer::with('person')
+            ->whereHas('person')
+            ->latest()
+            ->limit(5)
+            ->get()
+            ->filter(fn($c) => $c->person)
+            ->map(
+                fn($c) => [
+                    'id' => $c->id,
+                    'person_id' => $c->person->id,
+                    'name' => $c->person->name,
+                    'firstname' => $c->person->firstname,
+                    'phone' => $c->person->phone,
+                    'initials' => strtoupper(substr($c->person->firstname, 0, 1) . substr($c->person->name, 0, 1)),
+                ],
+            )
+            ->values()
+            ->toArray();
     }
 
     public function loadPeople()
     {
-        if ($this->type === 'customer') {
-            $query = Customer::with('person');
+        $query = Customer::with('person');
 
-            if (!empty($this->personSearch)) {
-                $query->whereHas('person', function ($q) {
-                    $q->where('name', 'like', '%' . $this->personSearch . '%')
-                        ->orWhere('firstname', 'like', '%' . $this->personSearch . '%')
-                        ->orWhere('phone', 'like', '%' . $this->personSearch . '%');
-                });
-            }
-
-            $this->people = $query
-                ->limit(20)
-                ->get()
-                ->filter(fn($c) => $c->person)
-                ->map(
-                    fn($c) => [
-                        'id' => $c->id,
-                        'person_id' => $c->person->id,
-                        'name' => $c->person->name,
-                        'firstname' => $c->person->firstname,
-                        'phone' => $c->person->phone,
-                        'email' => $c->person->email,
-                        'cnib' => $c->person->cnib,
-                        'type' => 'customer',
-                        'display' => $c->person->name . ' ' . $c->person->firstname . ' - ' . $c->person->phone,
-                    ],
-                )
-                ->values()
-                ->toArray();
-        } else {
-            $vendeusePosition = Position::where('slug', 'vendeuse')->first();
-            if (!$vendeusePosition) {
-                $this->people = [];
-                return;
-            }
-
-            $query = Employee::with('person')->where('position_id', $vendeusePosition->id);
-
-            if (!empty($this->personSearch)) {
-                $query->whereHas('person', function ($q) {
-                    $q->where('name', 'like', '%' . $this->personSearch . '%')
-                        ->orWhere('firstname', 'like', '%' . $this->personSearch . '%')
-                        ->orWhere('phone', 'like', '%' . $this->personSearch . '%');
-                });
-            }
-
-            $this->people = $query
-                ->limit(20)
-                ->get()
-                ->filter(fn($e) => $e->person)
-                ->map(
-                    fn($e) => [
-                        'id' => $e->id,
-                        'person_id' => $e->person->id,
-                        'name' => $e->person->name,
-                        'firstname' => $e->person->firstname,
-                        'phone' => $e->person->phone,
-                        'email' => $e->person->email,
-                        'cnib' => $e->person->cnib,
-                        'type' => 'seller',
-                        'display' => $e->person->name . ' ' . $e->person->firstname . ' (Vendeuse) - ' . $e->person->phone,
-                    ],
-                )
-                ->values()
-                ->toArray();
+        if (!empty($this->personSearch)) {
+            $query->whereHas('person', function ($q) {
+                $q->where('name', 'like', '%' . $this->personSearch . '%')
+                    ->orWhere('firstname', 'like', '%' . $this->personSearch . '%')
+                    ->orWhere('phone', 'like', '%' . $this->personSearch . '%');
+            });
         }
+
+        $this->people = $query
+            ->limit(20)
+            ->get()
+            ->filter(fn($c) => $c->person)
+            ->map(
+                fn($c) => [
+                    'id' => $c->id,
+                    'person_id' => $c->person->id,
+                    'name' => $c->person->name,
+                    'firstname' => $c->person->firstname,
+                    'phone' => $c->person->phone,
+                    'email' => $c->person->email,
+                    'cnib' => $c->person->cnib,
+                    'display' => $c->person->name . ' ' . $c->person->firstname . ' - ' . $c->person->phone,
+                ],
+            )
+            ->values()
+            ->toArray();
     }
 
     public function updatedPersonSearch()
@@ -170,44 +126,123 @@ new class extends Component {
         }
     }
 
+    // À ajouter dans la méthode selectPerson() après avoir chargé les données
     public function selectPerson($id)
     {
         \Log::info('selectPerson appelé avec ID: ' . $id);
 
-        // $id est l'ID du customer ou de l'employee
         $this->selectedPersonId = $id;
         $this->dropdownOpen = false;
 
-        // Charger les données de la personne sélectionnée
-        if ($this->type === 'customer') {
-            $customer = Customer::with('person')->find($id);
-            if ($customer && $customer->person) {
-                $this->personId = $customer->person->id;
-                $this->customerId = $customer->id;
-                $this->employeeId = null;
-                $this->name = $customer->person->name;
-                $this->firstname = $customer->person->firstname;
-                $this->phone = $customer->person->phone;
-                $this->email = $customer->person->email;
-                $this->cnib = $customer->person->cnib;
-            }
-        } else {
-            $employee = Employee::with('person')->find($id);
-            if ($employee && $employee->person) {
-                $this->personId = $employee->person->id;
-                $this->employeeId = $employee->id;
-                $this->customerId = null;
-                $this->name = $employee->person->name;
-                $this->firstname = $employee->person->firstname;
-                $this->phone = $employee->person->phone;
-                $this->email = $employee->person->email;
-                $this->cnib = $employee->person->cnib;
-            }
+        $customer = Customer::with('person')->find($id);
+        if ($customer && $customer->person) {
+            $this->personId = $customer->person->id;
+            $this->customerId = $customer->id;
+            $this->name = $customer->person->name;
+            $this->firstname = $customer->person->firstname;
+            $this->phone = $customer->person->phone;
+            $this->email = $customer->person->email;
+            $this->cnib = $customer->person->cnib;
+
+            // DISPATCHER LE CLIENT SÉLECTIONNÉ
+            $this->dispatch('customerSelected', [
+                'id' => $customer->id,
+                'person_id' => $customer->person->id,
+                'name' => $customer->person->name,
+                'firstname' => $customer->person->firstname,
+                'phone' => $customer->person->phone,
+                'email' => $customer->person->email,
+                'full_name' => $customer->person->firstname . ' ' . $customer->person->name,
+            ]);
         }
 
-        // Recharger la liste pour mettre à jour le fond vert
         $this->loadPeople();
         $this->loadPinnedCustomers();
+    }
+
+    // À ajouter dans la méthode savePerson() après la création/mise à jour
+    public function savePerson()
+    {
+        $this->validate([
+            'phone' => 'required|string|max:20',
+            'name' => 'required|string|max:100',
+            'firstname' => 'required|string|max:100',
+            'email' => 'nullable|email',
+            'cnib' => 'nullable|string|max:50',
+        ]);
+
+        if ($this->personId) {
+            $person = Person::find($this->personId);
+            $person->update([
+                'phone' => $this->phone,
+                'name' => $this->name,
+                'firstname' => $this->firstname,
+                'cnib' => $this->cnib,
+                'email' => $this->email,
+            ]);
+
+            // DISPATCHER LE CLIENT MIS À JOUR
+            $this->dispatch('customerUpdated', [
+                'id' => $this->customerId,
+                'person_id' => $person->id,
+                'name' => $person->name,
+                'firstname' => $person->firstname,
+                'phone' => $person->phone,
+                'email' => $person->email,
+                'full_name' => $person->firstname . ' ' . $person->name,
+            ]);
+
+            session()->flash('message', 'Client mis à jour!');
+        } else {
+            $person = Person::create([
+                'phone' => $this->phone,
+                'name' => $this->name,
+                'firstname' => $this->firstname,
+                'cnib' => $this->cnib,
+                'email' => $this->email,
+            ]);
+
+            $customer = Customer::create([
+                'person_id' => $person->id,
+                'customer_number' => 'CUST-' . str_pad($person->id, 5, '0', STR_PAD_LEFT),
+            ]);
+
+            $this->customerId = $customer->id;
+            $this->selectedPersonId = $customer->id;
+
+            // DISPATCHER LE NOUVEAU CLIENT
+            $this->dispatch('customerCreated', [
+                'id' => $customer->id,
+                'person_id' => $person->id,
+                'name' => $person->name,
+                'firstname' => $person->firstname,
+                'phone' => $person->phone,
+                'email' => $person->email,
+                'full_name' => $person->firstname . ' ' . $person->name,
+            ]);
+
+            session()->flash('message', 'Nouveau client créé!');
+        }
+
+        $this->personId = $person->id;
+        $this->loadPeople();
+        $this->loadPinnedCustomers();
+    }
+
+    // Optionnel : méthode pour dispatcher manuellement
+    public function dispatchCustomer()
+    {
+        if ($this->customerId) {
+            $this->dispatch('customerSelected', [
+                'id' => $this->customerId,
+                'person_id' => $this->personId,
+                'name' => $this->name,
+                'firstname' => $this->firstname,
+                'phone' => $this->phone,
+                'email' => $this->email,
+                'full_name' => $this->firstname . ' ' . $this->name,
+            ]);
+        }
     }
 
     public function editPerson($personId)
@@ -247,7 +282,6 @@ new class extends Component {
     {
         $this->personId = null;
         $this->customerId = null;
-        $this->employeeId = null;
         $this->name = '';
         $this->firstname = '';
         $this->cnib = '';
@@ -255,85 +289,25 @@ new class extends Component {
         $this->phone = '';
     }
 
-    public function savePerson()
-    {
-        // Validation et sauvegarde...
-        $this->validate([
-            'phone' => 'required|string|max:20',
-            'name' => 'required|string|max:100',
-            'firstname' => 'required|string|max:100',
-            'email' => 'nullable|email',
-            'cnib' => 'nullable|string|max:50',
-        ]);
-
-        if ($this->personId) {
-            $person = Person::find($this->personId);
-            $person->update([
-                'phone' => $this->phone,
-                'name' => $this->name,
-                'firstname' => $this->firstname,
-                'cnib' => $this->cnib,
-                'email' => $this->email,
-            ]);
-            session()->flash('message', 'Personne mise à jour!');
-        } else {
-            $person = Person::create([
-                'phone' => $this->phone,
-                'name' => $this->name,
-                'firstname' => $this->firstname,
-                'cnib' => $this->cnib,
-                'email' => $this->email,
-            ]);
-
-            if ($this->type === 'customer') {
-                $customer = Customer::create([
-                    'person_id' => $person->id,
-                    'customer_number' => 'CUST-' . str_pad($person->id, 5, '0', STR_PAD_LEFT),
-                ]);
-                $this->customerId = $customer->id;
-                $this->selectedPersonId = $customer->id;
-            } else {
-                $vendeusePosition = Position::where('slug', 'vendeuse')->first();
-                if ($vendeusePosition) {
-                    $employee = Employee::create([
-                        'person_id' => $person->id,
-                        'position_id' => $vendeusePosition->id,
-                        'employee_number' => 'EMP-' . str_pad($person->id, 5, '0', STR_PAD_LEFT),
-                    ]);
-                    $this->employeeId = $employee->id;
-                    $this->selectedPersonId = $employee->id;
-                }
-            }
-
-            session()->flash('message', 'Nouvelle personne créée!');
-        }
-
-        $this->personId = $person->id;
-        $this->loadPeople();
-        $this->loadPinnedCustomers();
-    }
-
     public function getSelectedPersonProperty()
     {
-        // Si on n'a pas d'ID sélectionné, on ne retourne rien
         if (!$this->selectedPersonId) {
             return null;
         }
 
-        // Retourne les données actuelles
         return [
-            'id'        => $this->selectedPersonId,
-            'name'      => $this->name,
+            'id' => $this->selectedPersonId,
+            'name' => $this->name,
             'firstname' => $this->firstname,
-            'phone'     => $this->phone,
-            'email'     => $this->email,
-            'cnib'      => $this->cnib,
+            'phone' => $this->phone,
+            'email' => $this->email,
+            'cnib' => $this->cnib,
         ];
     }
 
     public function getTitleProperty()
     {
-        return $this->type === 'customer' ? 'Client' : 'Vendeuse';
+        return 'Client';
     }
 };
 
@@ -353,7 +327,7 @@ new class extends Component {
             <!-- SELECTEUR -->
             <div class="mb-4">
                 <label class="form-label fw-bold">
-                    <i class="fas fa-users me-1"></i> Sélectionner un(e) {{ strtolower($this->title) }}
+                    <i class="fas fa-users me-1"></i> Sélectionner un client
                 </label>
 
                 <div class="custom-select-container" wire:ignore.self>
@@ -366,7 +340,7 @@ new class extends Component {
                                 {{ $this->selectedPerson['name'] }} {{ $this->selectedPerson['firstname'] }} -
                                 {{ $this->selectedPerson['phone'] }}
                             @else
-                                Choisir un(e) {{ strtolower($this->title) }}...
+                                Choisir un client...
                             @endif
                         </span>
                         <i class="fas fa-chevron-down"></i>
@@ -414,12 +388,11 @@ new class extends Component {
                                 @empty
                                     <div class="text-center py-4 px-3">
                                         <i class="fas fa-user-slash fa-2x text-muted mb-2"></i>
-                                        <p class="text-muted mb-2">Aucun(e) {{ strtolower($this->title) }} trouvé(e)
-                                        </p>
+                                        <p class="text-muted mb-2">Aucun client trouvé</p>
                                         <button type="button" class="btn btn-sm btn-outline-primary w-100"
                                             wire:click="newPerson">
                                             <i class="fas fa-plus-circle me-1"></i>
-                                            Créer un(e) nouveau(elle)
+                                            Créer un nouveau client
                                         </button>
                                     </div>
                                 @endforelse
@@ -432,7 +405,7 @@ new class extends Component {
             <!-- Boutons sous le select -->
             <div class="d-flex gap-2 mb-3">
                 <button type="button" class="btn btn-outline-secondary flex-grow-1" wire:click="newPerson">
-                    <i class="fas fa-user-plus me-1"></i> Nouveau(elle)
+                    <i class="fas fa-user-plus me-1"></i> Nouveau
                 </button>
                 @if ($this->selectedPerson)
                     <button type="button" class="btn btn-outline-primary"
@@ -450,11 +423,12 @@ new class extends Component {
             @if (count($pinnedCustomers) > 0)
                 <div class="mb-3">
                     <label class="form-label fw-bold small text-muted mb-2">
-                        <i class="fas fa-thumbtack me-1"></i> Récents
+                        <i class="fas fa-thumbtack me-1"></i> Clients récents
                     </label>
                     <div class="d-flex flex-wrap gap-2">
                         @foreach ($pinnedCustomers as $pinned)
-                            <div wire:key="pinned-customer-{{ $pinned['id'] }}" class="pinned-item d-flex align-items-center gap-2 p-2 rounded border"
+                            <div wire:key="pinned-customer-{{ $pinned['id'] }}"
+                                class="pinned-item d-flex align-items-center gap-2 p-2 rounded border"
                                 style="cursor:pointer; background-color: {{ $selectedPersonId == $pinned['id'] ? '#d4edda' : '#f8f9fa' }}; border-color: #dee2e6;"
                                 wire:click="selectPerson({{ $pinned['id'] }})"
                                 title="{{ $pinned['firstname'] }} {{ $pinned['name'] }} - {{ $pinned['phone'] }}">
@@ -477,11 +451,11 @@ new class extends Component {
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="mb-0">
                         @if ($viewMode)
-                            <span class="badge bg-info">Détails</span>
+                            <span class="badge bg-info">Détails client</span>
                         @elseif($this->selectedPerson)
-                            <span class="badge bg-success">Modification</span>
+                            <span class="badge bg-success">Modification client</span>
                         @else
-                            <span class="badge bg-primary">Nouveau</span>
+                            <span class="badge bg-primary">Nouveau client</span>
                         @endif
                     </h6>
                     <button type="button" class="btn btn-sm btn-outline-secondary" wire:click="newSearch">
@@ -498,9 +472,7 @@ new class extends Component {
                                 <i class="fas fa-user-circle fa-4x text-primary"></i>
                             </div>
                             <h4>{{ $name }} {{ $firstname }}</h4>
-                            <span class="badge bg-{{ $type === 'customer' ? 'primary' : 'info' }}">
-                                {{ $type === 'customer' ? 'Client' : 'Vendeuse' }}
-                            </span>
+                            <span class="badge bg-primary">Client</span>
                         </div>
 
                         <div class="bg-light p-3 rounded-3 mb-4">
@@ -516,7 +488,7 @@ new class extends Component {
                                 <span class="text-muted">CNIB</span>
                                 <span class="fw-bold">{{ $cnib ?: 'Non renseigné' }}</span>
                             </div>
-                            @if ($type === 'customer' && $customerId)
+                            @if ($customerId)
                                 <div class="d-flex justify-content-between py-2">
                                     <span class="text-muted">N° Client</span>
                                     <span class="fw-bold">#{{ str_pad($customerId, 5, '0', STR_PAD_LEFT) }}</span>
@@ -529,7 +501,8 @@ new class extends Component {
                                 wire:click="editPerson({{ $selectedPersonId }})">
                                 <i class="fas fa-edit me-1"></i> Modifier
                             </button>
-                            <button type="button" class="btn btn-outline-secondary flex-grow-1" wire:click="newSearch">
+                            <button type="button" class="btn btn-outline-secondary flex-grow-1"
+                                wire:click="newSearch">
                                 <i class="fas fa-check me-1"></i> OK
                             </button>
                         </div>

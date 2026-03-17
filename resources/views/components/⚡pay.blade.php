@@ -17,6 +17,7 @@ new class extends Component {
     public float $change = 0;
     public string $paymentMethod = 'cash';
     public float $total = 0;
+    public $customer = null;
 
     public ?string $paymentStatus = null;
 
@@ -35,8 +36,21 @@ new class extends Component {
         'cartUpdated' => 'refreshCart',
         'resetPaymentStatus' => 'resetPaymentStatus',
         'orderCreated' => 'handleOrderCreated',
-        'orderUpdated' => 'loadOrder', // ← AJOUTE CET ÉCOUTEUR
+        'orderUpdated' => 'loadOrder',
+        'customerSelected' => 'setCustomer',
     ];
+
+    public function setCustomer($customerData)
+    {
+        $this->customer = $customerData;
+        Log::info('Client sélectionné:', $customerData);
+    }
+
+    public function clearCustomerSelection()
+    {
+        $this->customer = null;
+        $this->dispatch('clearCustomerFromPay')->to('customer');
+    }
 
     public function getCanViewPaymentsProperty()
     {
@@ -166,7 +180,6 @@ new class extends Component {
 
         // Cas 2 : Création + Paiement d'un panier
         if ($this->cart) {
-            
             if ($this->cart->items()->count() === 0) {
                 session()->flash('error', 'Le panier est vide.');
                 return;
@@ -179,7 +192,7 @@ new class extends Component {
 
             try {
                 // Utiliser CheckoutService pour créer ET payer en une transaction
-                $result = $this->checkoutService->createOrderAndPay($this->cart, floatval($this->amountPaid ?? 0), $this->paymentMethod);
+                $result = $this->checkoutService->createOrderAndPay($this->cart, floatval($this->amountPaid ?? 0), $this->paymentMethod, $this->customer);
 
                 Log::info('Résultat checkout', $result);
 
@@ -240,6 +253,8 @@ new class extends Component {
                 $this->dispatch('paymentStatus', status: 'success');
 
                 session()->flash('success', $result['message']);
+                Log::info('payment success');
+                $this->clearCustomerSelection();
             } else {
                 $this->paymentStatus = 'error';
                 $this->dispatch('paymentStatus', status: 'error');
@@ -333,8 +348,7 @@ new class extends Component {
                 </div>
             </div>
 
-            {{-- Zone pour l'icône de statut et le récapitulatif statique --}}
-            {{-- Zone à hauteur fixe pour l'icône de statut --}}
+            {{-- Zone pour l'icône de statut et le récapitulatif --}}
             <div class="d-none d-md-block" style="min-height: 220px; position: relative;">
                 {{-- Message par défaut quand pas de commande/panier et pas de statut --}}
                 @if (!$order && !$cart && !$paymentStatus)
@@ -369,42 +383,64 @@ new class extends Component {
                         <div class="bg-light rounded-3 p-2 mb-2 small">
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-secondary">Total</span>
-                                <span class="fw-bold text-primary">1,800 XOF</span>
+                                <span class="fw-bold text-primary">{{ number_format($total, 0) }} XOF</span>
                             </div>
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-secondary">Reçu</span>
-                                <span class="fw-bold">2,000 XOF</span>
+                                <span class="fw-bold">{{ number_format($amountPaid, 0) }} XOF</span>
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span class="text-secondary">Monnaie</span>
-                                <span class="fw-bold text-success">200 XOF</span>
+                                <span class="fw-bold text-success">{{ number_format($change, 0) }} XOF</span>
                             </div>
                         </div>
 
-                        {{-- Informations client --}}
-                        <div class="px-2 small">
-                            <div class="d-flex justify-content-between mb-1">
-                                <span class="text-secondary">Client</span>
-                                <span class="fw-medium">utilie Dupont</span>
+                        {{-- Informations client avec gestion des null --}}
+                        @if ($customer)
+                            <div class="px-2 small">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-secondary">Client</span>
+                                    <span class="fw-medium">{{ $customer['firstname'] ?? '' }}
+                                        {{ $customer['name'] ?? '' }}</span>
+                                </div>
+                                @if (!empty($customer['phone']))
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-secondary">Tél</span>
+                                        <span class="fw-medium">{{ $customer['phone'] }}</span>
+                                    </div>
+                                @endif
+                                @if (!empty($customer['email']))
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-secondary">Email</span>
+                                        <span class="fw-medium small">{{ $customer['email'] }}</span>
+                                    </div>
+                                @endif
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-secondary">{{ now()->format('d/m H:i') }}</span>
+                                    <span class="fw-medium">#{{ $order?->id ?? rand(100, 999) }}</span>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between mb-1">
-                                <span class="text-secondary">Tél</span>
-                                <span class="fw-medium">65 12 04 30</span>
+                        @else
+                            {{-- Client anonyme --}}
+                            <div class="px-2 small">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-secondary">Client</span>
+                                    <span class="fw-medium fst-italic text-muted">Client sans compte</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-secondary">{{ now()->format('d/m H:i') }}</span>
+                                    <span class="fw-medium">#{{ $order?->id ?? rand(100, 999) }}</span>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-secondary">{{ now()->format('d/m H:i') }}</span>
-                                <span class="fw-medium">#{{ rand(100, 999) }}</span>
-                            </div>
-                        </div>
+                        @endif
                     </div>
                 @endif
 
-                {{-- Icône de statut pendant une transaction --}}
                 @if ($paymentStatus && ($order || $cart))
                     <div id="payment-status-icon" class="position-absolute start-50 translate-middle-x" style="top: 150px;">
                         <div class="position-relative">
                             <div class="position-absolute top-50 start-50 translate-middle 
-                        {{ $paymentStatus === 'success' ? 'bg-success' : 'bg-danger' }} bg-opacity-10 rounded-circle"
+            {{ $paymentStatus === 'success' ? 'bg-success' : 'bg-danger' }} bg-opacity-10 rounded-circle"
                                 style="width: 60px; height: 60px;">
                             </div>
                             <div class="position-relative {{ $paymentStatus === 'success' ? 'bg-success' : 'bg-danger' }} rounded-circle d-flex align-items-center justify-content-center"
@@ -428,8 +464,6 @@ new class extends Component {
                         </div>
                     </div>
                 @endif
-
-                {{-- Supprimer le texte "RECAP PAIMENT" qui n'est plus nécessaire --}}
             </div>
         </div>
 
@@ -450,6 +484,6 @@ new class extends Component {
     </div>
 @else
     <div>
-       
+
     </div>
 @endcan

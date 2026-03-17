@@ -13,9 +13,9 @@ use Illuminate\Support\Facades\Auth;
 
 class OrderService
 {
-    public function createOrderFromCart(Cart $cart): Order
+    public function createOrderFromCart(Cart $cart, array $customer): Order
     {
-        return DB::transaction(function () use ($cart) {
+        return DB::transaction(function () use ($cart, $customer) {
             $subtotal = $cart->subtotal;
             $tax = $cart->tax;
             $total = $cart->total;
@@ -30,9 +30,9 @@ class OrderService
             // 1. Créer la commande
             $order = Order::create([
                 'checkout_id' => $checkout->id,
-                'customer_id' => $customer->id,
                 'status' => 'pending',
                 'amount_paid' => 0,
+                'customer_id'  => $customer['id']
             ]);
 
             // 2. Créer les items de commande (SANS invoice)

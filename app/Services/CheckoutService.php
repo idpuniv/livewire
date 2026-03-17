@@ -21,7 +21,7 @@ class CheckoutService
     /**
      * Crée une commande ET effectue le paiement en une seule transaction
      */
-    public function createOrderAndPay(Cart $cart, float $amountPaid, string $paymentMethod): array
+    public function createOrderAndPay(Cart $cart, float $amountPaid, string $paymentMethod, array $customer): array
     {
         if ($paymentMethod === 'cash' && $amountPaid < $cart->total) {
             return [
@@ -32,8 +32,8 @@ class CheckoutService
         }
 
         try {
-            return DB::transaction(function () use ($cart, $amountPaid, $paymentMethod) {
-                $order = $this->orderService->createOrderFromCart($cart);
+            return DB::transaction(function () use ($cart, $amountPaid, $paymentMethod, $customer) {
+                $order = $this->orderService->createOrderFromCart($cart, $customer);
                 $paymentResult = $this->paymentService->processPayment(
                     $order,
                     $amountPaid,

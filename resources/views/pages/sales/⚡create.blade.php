@@ -23,7 +23,7 @@ new class extends Component {
     public $editingProductId = null;
     public $editingQuantity = 1;
     public ?string $mobilePaymentStatus = null;
-    public  $customer = null;
+    public $customer = null;
 
     public $hoveredProductId = null;
 
@@ -47,7 +47,20 @@ new class extends Component {
         'showMobileReceipt' => 'setShowReceipt',
         'paymentStatus' => 'paymentStatusUpdated',
         'keyboardShortcut' => 'handleKeyboardShortcut',
+        'customerSelected' => 'setCustomer',
     ];
+
+    public function setCustomer($customerData)
+    {
+        $this->customer = $customerData;
+        Log::info('Client sélectionné:', $customerData);
+    }
+
+    public function clearCustomerSelection()
+    {
+        $this->customer = null;
+        $this->dispatch('clearCustomerSelection')->to('customer');
+    }
 
     public function getCanCreateOrderProperty()
     {
@@ -214,8 +227,9 @@ new class extends Component {
         }
 
         try {
-            $this->order = $this->orderService->createOrderFromCart($this->cart);
+            $this->order = $this->orderService->createOrderFromCart($this->cart, $this->customer);
             $orderId = $this->order->id;
+            $this->clearCustomerSelection();
 
             $canPay = auth()->user()?->can(\App\Permissions\PaymentPermissions::CREATE) ?? false;
             if (!$canPay) {
