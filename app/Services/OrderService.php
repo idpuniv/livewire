@@ -30,6 +30,7 @@ class OrderService
             // 1. Créer la commande
             $order = Order::create([
                 'checkout_id' => $checkout->id,
+                'customer_id' => $customer->id,
                 'status' => 'pending',
                 'amount_paid' => 0,
             ]);

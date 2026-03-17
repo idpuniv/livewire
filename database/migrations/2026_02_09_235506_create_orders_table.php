@@ -9,7 +9,7 @@ return new class extends Migration {
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
             $table->foreignId('checkout_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('person_id')->nullable()->constrained()->cascadeOnDelete();
+            $table->foreignId('customer_id')->nullable()->constrained()->cascadeOnDelete();
             $table->foreignId('cashier_id')->nullable()->constrained()->cascadeOnDelete();
             $table->enum('status', ['pending', 'confirmed'])->default('pending');
             $table->decimal('amount_paid', 10, 2)->nullable();

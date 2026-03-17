@@ -23,8 +23,8 @@ new class extends Component {
     public $editingProductId = null;
     public $editingQuantity = 1;
     public ?string $mobilePaymentStatus = null;
+    public  $customer = null;
 
-    // Nouvelle propriété pour le survol
     public $hoveredProductId = null;
 
     protected ProductService $productService;

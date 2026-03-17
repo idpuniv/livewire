@@ -10,13 +10,19 @@ class Order extends Model
         'checkout_id',
         'status',
         'amount_paid',
-        ];
+    ];
+
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);  // ← hasOne, pas belongsTo !
+    }
 
     // Une commande appartient à une facture
     public function invoice()
-{
-    return $this->hasOne(Invoice::class);  // ← hasOne, pas belongsTo !
-}
+    {
+        return $this->hasOne(Invoice::class);  // ← hasOne, pas belongsTo !
+    }
 
     // Une commande peut générer un reçu
     public function receipt()
@@ -67,12 +73,12 @@ class Order extends Model
     }
 
     public function getTaxAttribute()
-{
-    return $this->items->sum(function ($item) {
-        $lineHt = $item->quantity * $item->unit_price;
-        return $lineHt * ($item->tva_rate ?? 0) / 100;
-    });
-}
+    {
+        return $this->items->sum(function ($item) {
+            $lineHt = $item->quantity * $item->unit_price;
+            return $lineHt * ($item->tva_rate ?? 0) / 100;
+        });
+    }
 
     // Total TTC
     public function getTotalAttribute()
