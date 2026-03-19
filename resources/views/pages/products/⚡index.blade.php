@@ -1049,44 +1049,71 @@ new class extends Component {
         </div>
 
         <!-- PAGINATION -->
-        @if ($products->hasPages())
-            <div class="card-footer bg-white border-top-0 pt-3">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
-                    <div class="text-muted small mb-2 mb-md-0">
-                        Affichage de {{ $products->firstItem() }} à {{ $products->lastItem() }} sur
-                        {{ $products->total() }} produits
-                    </div>
-
-                    <nav aria-label="Pagination">
-                        <ul class="pagination my-0" style="gap: 2px;">
-                            <li class="page-item {{ $products->onFirstPage() ? 'disabled' : '' }}">
-                                <a class="page-link" href="#" wire:click.prevent="previousPage" rel="prev"
-                                    style="border-radius: 4px;">
-                                    <span aria-hidden="true">&laquo;</span>
-                                </a>
-                            </li>
-
-                            @foreach ($products->getUrlRange(1, $products->lastPage()) as $page => $url)
-                                <li class="page-item {{ $page == $products->currentPage() ? 'active' : '' }}">
-                                    <a class="page-link" href="#"
-                                        wire:click.prevent="gotoPage({{ $page }})"
-                                        style="border-radius: 4px;">
-                                        {{ $page }}
-                                    </a>
-                                </li>
-                            @endforeach
-
-                            <li class="page-item {{ !$products->hasMorePages() ? 'disabled' : '' }}">
-                                <a class="page-link" href="#" wire:click.prevent="nextPage" rel="next"
-                                    style="border-radius: 4px;">
-                                    <span aria-hidden="true">&raquo;</span>
-                                </a>
-                            </li>
-                        </ul>
-                    </nav>
-                </div>
+       @if ($products->hasPages())
+    <div class="card-footer bg-white border-top-0 pt-3">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
+            <div class="text-muted small mb-2 mb-md-0">
+                Affichage de {{ $products->firstItem() }} à {{ $products->lastItem() }} sur
+                {{ $products->total() }} produits
             </div>
-        @endif
+
+            <nav aria-label="Pagination">
+                <ul class="pagination my-0" style="gap: 2px;">
+                    {{-- Lien Previous --}}
+                    <li class="page-item {{ $products->onFirstPage() ? 'disabled' : '' }}">
+                        <a class="page-link" href="#" wire:click.prevent="previousPage" rel="prev"
+                            style="border-radius: 4px;">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+
+                    {{-- Première page --}}
+                    @if($products->currentPage() > 3)
+                        <li class="page-item">
+                            <a class="page-link" href="#" wire:click.prevent="gotoPage(1)" style="border-radius: 4px;">1</a>
+                        </li>
+                        @if($products->currentPage() > 4)
+                            <li class="page-item disabled">
+                                <span class="page-link" style="border-radius: 4px;">...</span>
+                            </li>
+                        @endif
+                    @endif
+
+                    {{-- Pages autour de la page courante --}}
+                    @foreach(range(max(1, $products->currentPage() - 2), min($products->lastPage(), $products->currentPage() + 2)) as $page)
+                        <li class="page-item {{ $page == $products->currentPage() ? 'active' : '' }}">
+                            <a class="page-link" href="#"
+                                wire:click.prevent="gotoPage({{ $page }})"
+                                style="border-radius: 4px;">
+                                {{ $page }}
+                            </a>
+                        </li>
+                    @endforeach
+
+                    {{-- Dernière page --}}
+                    @if($products->currentPage() < $products->lastPage() - 2)
+                        @if($products->currentPage() < $products->lastPage() - 3)
+                            <li class="page-item disabled">
+                                <span class="page-link" style="border-radius: 4px;">...</span>
+                            </li>
+                        @endif
+                        <li class="page-item">
+                            <a class="page-link" href="#" wire:click.prevent="gotoPage({{ $products->lastPage() }})" style="border-radius: 4px;">{{ $products->lastPage() }}</a>
+                        </li>
+                    @endif
+
+                    {{-- Lien Next --}}
+                    <li class="page-item {{ !$products->hasMorePages() ? 'disabled' : '' }}">
+                        <a class="page-link" href="#" wire:click.prevent="nextPage" rel="next"
+                            style="border-radius: 4px;">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+@endif
     </div>
 
     <!-- Modal Produit -->
@@ -1094,8 +1121,8 @@ new class extends Component {
 @if ($showModal)
     <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1"
         aria-modal="true" role="dialog">
-        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content border-0 shadow-lg">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="max-height: 90vh; display: flex; flex-direction: column;">
                 <div class="modal-header bg-light border-bottom">
                     <h5 class="modal-title fw-bold text-dark">
                         <i class="bi bi-{{ $editingProductId ? 'pencil' : 'plus-circle' }} me-2"></i>
@@ -1104,8 +1131,8 @@ new class extends Component {
                     <button type="button" class="btn-close" wire:click="$set('showModal', false)"></button>
                 </div>
 
-                <form wire:submit.prevent="save">
-                    <div class="modal-body">
+                <form wire:submit.prevent="save" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                    <div class="modal-body" style="overflow-y: auto; flex: 1; padding: 1rem;">
                         <!-- Ligne 1: Nom et Code -->
                         <div class="row g-3 mb-3">
                             <div class="col-md-6">
@@ -1147,7 +1174,7 @@ new class extends Component {
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">
                                     Seuil d'alerte
-                                    <i class="bi bi-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="Alerte quand le stock passe sous cette valeur"></i>
+                                    <i class="bi bi-info-circle text-muted ms-1"></i>
                                 </label>
                                 <input type="number" class="form-control" wire:model="stock_threshold"
                                     min="0" max="100" step="1" placeholder="5">
@@ -1277,12 +1304,13 @@ new class extends Component {
             </div>
         </div>
     </div>
+    <div class="modal-backdrop fade show"></div>
 @endif
 
     <!-- Modal Mouvement de Stock -->
     @if ($showStockModal && $selectedProductForStock)
         <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content border-0 shadow-lg">
                     <div class="modal-header bg-light">
                         <h5 class="modal-title">

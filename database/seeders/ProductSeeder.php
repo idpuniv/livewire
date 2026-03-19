@@ -91,13 +91,13 @@ class ProductSeeder extends Seeder
                 'price' => $productData['price'],
                 'tva_rate' => $productData['tva_rate'],
                 'stock' => $productData['stock'],
-                'image' => $productData['image_url'] ?: null, // URL ou null
+                'image' =>  null,
                 'published_at' => now(),
             ]);
         }
 
         // Produits supplémentaires - SANS images
-        Product::factory(10)
+        Product::factory(200)
             ->published()
             ->create([
                 'image' => null, // Pas d'image
