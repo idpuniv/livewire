@@ -48,12 +48,18 @@ new class extends Component {
         'paymentStatus' => 'paymentStatusUpdated',
         'keyboardShortcut' => 'handleKeyboardShortcut',
         'customerSelected' => 'setCustomer',
+        'clearCustomerFromPay' => 'clearCustomer',
     ];
 
     public function setCustomer($customerData)
     {
         $this->customer = $customerData;
         Log::info('Client sélectionné:', $customerData);
+    }
+
+    public function clearCustomer()
+    {
+        $this->customer = null;
     }
 
     public function clearCustomerSelection()
@@ -159,18 +165,6 @@ new class extends Component {
 
     public function mount()
     {
-        static $workerStarted = false;
-
-        if (!$workerStarted) {
-            try {
-                Log::info('Tentative de lancement du worker');
-                include base_path('startWorkerDynamic.php');
-                $workerStarted = true;
-                Log::info('Worker lancé avec succès');
-            } catch (\Throwable $e) {
-                Log::error('Impossible de démarrer le worker : ' . $e->getMessage());
-            }
-        }
         $this->loadProducts();
         $this->createCart();
         $this->syncCartItems();
@@ -180,7 +174,6 @@ new class extends Component {
     public function handleProductUpdate($payload)
     {
         Log::info('handleProductUpdate called', ['payload' => $payload]);
-        $this->loadProducts();
         $this->dispatch('$refresh');
     }
 
@@ -229,10 +222,10 @@ new class extends Component {
         try {
             $this->order = $this->orderService->createOrderFromCart($this->cart, $this->customer);
             $orderId = $this->order->id;
-            $this->clearCustomerSelection();
 
             $canPay = auth()->user()?->can(\App\Permissions\PaymentPermissions::CREATE) ?? false;
             if (!$canPay) {
+                $this->clearCustomerSelection();
                 $this->clearCart2();
             }
 
@@ -502,7 +495,7 @@ new class extends Component {
 
                                         <!-- Condition : image ou SVG générique -->
                                         @if ($product['image'])
-                                            <img src="{{ $product['image'] }}" class="card-img-top"
+                                            <img src="{{ asset('storage/' . $product['image']) }}" class="card-img-top"
                                                 alt="{{ $product['name'] }}"
                                                 style="height: 160px; object-fit: cover; aspect-ratio: 1/1;">
                                         @else
@@ -536,19 +529,18 @@ new class extends Component {
                                                 <span class="badge bg-warning text-dark">Choice</span>
                                             @endif
                                         </div>
-
-                                        <!-- Bouton ajouter / quantité -->
                                         @if ($product['selected'])
-                                            <button
+                                            <button type="button"
+                                                wire:key="btn-qty-{{ $product['id'] }}-{{ $product['quantity'] }}"
                                                 class="position-absolute bottom-0 end-0 m-2 btn btn-primary rounded-circle d-flex align-items-center justify-content-center p-0"
-                                                style="width: 32px; height: 32px;"
+                                                style="width: 32px; height: 32px; z-index: 20;"
                                                 wire:click.stop="openQuantityModal({{ $product['id'] }})">
                                                 {{ $product['quantity'] }}
                                             </button>
                                         @else
-                                            <button
+                                            <button type="button" wire:key="btn-add-{{ $product['id'] }}"
                                                 class="position-absolute bottom-0 end-0 m-2 btn btn-light rounded-circle d-flex align-items-center justify-content-center p-0 border"
-                                                style="width: 32px; height: 32px;"
+                                                style="width: 32px; height: 32px; z-index: 20;"
                                                 wire:click.stop="addToCart({{ $product['id'] }})"
                                                 @if ($product['stock'] === 0) disabled @endif>
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -619,7 +611,10 @@ new class extends Component {
                             <!-- Desktop : bouton Créer (plus tard : condition avec permission) -->
                             @can(OrderPermissions::CREATE)
                                 <button class="btn btn-primary btn-sm d-none d-md-block" wire:click="createCheckout"
-                                    @if ($order && auth()->user()->can(\App\Permissions\PaymentPermissions::CREATE)) disabled @endif>
+                                    @if (
+                                        ($order && auth()->user()->can(\App\Permissions\PaymentPermissions::CREATE)) ||
+                                            $this->selectedCount === 0 ||
+                                            !$customer) disabled @endif>
                                     Créer la commande
                                 </button>
                             @endcan
@@ -628,12 +623,15 @@ new class extends Component {
                             <div class="d-md-none d-flex gap-2">
                                 <!-- Bouton Créer commande (toujours visible sur mobile pour l'instant) -->
                                 @can(OrderPermissions::CREATE)
-                                    <button class="btn btn-primary btn-sm" wire:click="createCheckout">
+                                    <button class="btn btn-primary btn-sm" wire:click="createCheckout"
+                                        @if (
+                                            ($order && auth()->user()->can(\App\Permissions\PaymentPermissions::CREATE)) ||
+                                                $this->selectedCount === 0 ||
+                                                !$customer) disabled @endif>
                                         <i class="fas fa-plus-circle me-1"></i>
                                         Créer
                                     </button>
                                 @endcan
-
                                 <!-- Bouton Payer - NE SERA AFFICHÉ QUE SI UNE COMMANDE EXISTE
                      (Plus tard on ajoutera && $canPay) -->
 
@@ -650,10 +648,11 @@ new class extends Component {
                 </div>
 
                 <!-- MODAL POUR MODIFIER LA QUANTITÉ - COMPLET -->
+                <!-- MODAL POUR MODIFIER LA QUANTITÉ - CORRIGÉ -->
                 @if ($showQuantityModal)
-                    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5); z-index: 1050;"
+                    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5); z-index: 1060;"
                         tabindex="-1" role="dialog" aria-modal="true"
-                        wire:key="quantity-modal-{{ $editingProductId }}">
+                        wire:key="quantity-modal-{{ $editingProductId }}-{{ time() }}">
                         <div class="modal-dialog modal-dialog-centered">
                             <div class="modal-content border-0 shadow-lg">
                                 <div class="modal-header bg-light border-bottom">
@@ -661,8 +660,8 @@ new class extends Component {
                                         <i class="fas fa-pencil-alt me-2"></i>
                                         Modifier la quantité
                                     </h5>
-                                    <button type="button" class="btn-close"
-                                        wire:click="closeQuantityModal"></button>
+                                    <button type="button" class="btn-close" wire:click="closeQuantityModal"
+                                        aria-label="Fermer"></button>
                                 </div>
 
                                 <form wire:submit.prevent="saveQuantity">
@@ -677,7 +676,7 @@ new class extends Component {
                                             <div class="mb-4">
                                                 <div class="d-flex align-items-center mb-3">
                                                     @if ($product['image'])
-                                                        <img src="{{ $product['image'] }}"
+                                                        <img src="{{ asset('storage/' . $product['image']) }}"
                                                             alt="{{ $product['name'] }}" class="rounded me-3"
                                                             style="width: 60px; height: 60px; object-fit: cover;">
                                                     @else
@@ -691,20 +690,22 @@ new class extends Component {
                                                         <div class="text-muted small">Code: {{ $product['code'] }}
                                                         </div>
                                                         <div class="text-success fw-bold">
-                                                            {{ number_format($product['price'], 2) }}</div>
+                                                            {{ number_format($product['price'], 0, ',', ' ') }} XOF
+                                                        </div>
                                                     </div>
                                                 </div>
 
                                                 <label class="form-label fw-semibold">Quantité</label>
                                                 <div class="d-flex align-items-center gap-3">
                                                     <button type="button" class="btn btn-outline-secondary"
-                                                        wire:click="$set('editingQuantity', {{ max(0, $editingQuantity - 1) }})"
-                                                        @if ($editingQuantity <= 0) disabled @endif>
+                                                        wire:click="$set('editingQuantity', {{ max(1, $editingQuantity - 1) }})"
+                                                        @if ($editingQuantity <= 1) disabled @endif>
                                                         <i class="fas fa-minus"></i>
                                                     </button>
                                                     <input type="number"
                                                         class="form-control text-center form-control-lg"
-                                                        wire:model="editingQuantity" min="0"
+                                                        wire:model.live="editingQuantity"
+                                                        wire:keyup.enter="saveQuantity" min="1"
                                                         max="{{ $product['stock'] }}" autofocus>
                                                     <button type="button" class="btn btn-outline-secondary"
                                                         wire:click="$set('editingQuantity', {{ min($product['stock'], $editingQuantity + 1) }})"
@@ -713,33 +714,56 @@ new class extends Component {
                                                     </button>
                                                 </div>
 
+                                                @error('editingQuantity')
+                                                    <div class="text-danger small mt-2">{{ $message }}</div>
+                                                @enderror
+
                                                 <div class="d-flex justify-content-between mt-3">
                                                     <div class="text-muted">
-                                                        <i class="fas fa-boxes me-1"></i> Stock:
-                                                        {{ $product['stock'] }}
+                                                        <i class="fas fa-boxes me-1"></i> Stock disponible:
+                                                        <span class="fw-bold">{{ $product['stock'] }}</span>
                                                     </div>
-                                                    <div class="fw-bold">
+                                                    <div class="fw-bold text-primary">
                                                         Total:
-                                                        {{ number_format($editingQuantity * $product['price'], 2) }}
+                                                        {{ number_format($editingQuantity * $product['price'], 0, ',', ' ') }}
+                                                        XOF
                                                     </div>
                                                 </div>
+
+                                                @if ($editingQuantity > $product['stock'])
+                                                    <div class="alert alert-warning mt-2 py-2 small">
+                                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                                        Quantité supérieure au stock disponible
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <div class="text-center py-4">
+                                                <i class="fas fa-exclamation-circle text-warning fa-3x mb-3"></i>
+                                                <p>Produit non trouvé</p>
                                             </div>
                                         @endif
                                     </div>
 
-                                    <div class="modal-footer border-top">
+                                    <div class="modal-footer border-top bg-light">
                                         <button type="button" class="btn btn-outline-secondary"
                                             wire:click="closeQuantityModal">
+                                            <i class="fas fa-times me-1"></i>
                                             Annuler
                                         </button>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-save me-1"></i> Enregistrer
+                                        <button type="submit" class="btn btn-primary"
+                                            @if ($product && ($editingQuantity > $product['stock'] || $editingQuantity < 1)) disabled @endif>
+                                            <i class="fas fa-save me-1"></i>
+                                            Enregistrer
                                         </button>
                                     </div>
                                 </form>
                             </div>
                         </div>
                     </div>
+
+                    <!-- Backdrop pour le modal -->
+                    <div class="modal-backdrop fade show" style="z-index: 1055;"></div>
                 @endif
 
             </div>

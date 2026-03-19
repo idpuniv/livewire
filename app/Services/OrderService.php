@@ -32,7 +32,8 @@ class OrderService
                 'checkout_id' => $checkout->id,
                 'status' => 'pending',
                 'amount_paid' => 0,
-                'customer_id'  => $customer['id']
+                'customer_id'  => $customer['id'],
+                'user_id' => Auth::id(),
             ]);
 
             // 2. Créer les items de commande (SANS invoice)

@@ -11,8 +11,8 @@ return new class extends Migration {
             $table->id();
             $table->string('receipt_number')->unique();
             $table->foreignId('order_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('casher_id')->constrained()->setNull();
-            $table->foreignId('payment_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('casher_id')->constrained()->nullOnDelete();
+            $table->foreignId('payment_id')->constrained()->nullOnDelete();
             $table->decimal('amount', 10, 2);
             $table->string('payment_method')->default('cash');
             $table->string('transaction_id')->nullable();

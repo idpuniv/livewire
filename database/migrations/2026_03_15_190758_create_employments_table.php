@@ -16,11 +16,9 @@ return new class extends Migration
             $table->date('end_date')->nullable();
             $table->decimal('salary', 10, 2);
             $table->string('department')->nullable();
-            $table->text('reason_left')->nullable(); // Motif de départ
+            $table->text('reason_left')->nullable();
             $table->boolean('is_current')->default(false);
             $table->timestamps();
-            
-            // Index pour les recherches
             $table->index(['people_id', 'is_current']);
             $table->index(['people_id', 'start_date']);
         });

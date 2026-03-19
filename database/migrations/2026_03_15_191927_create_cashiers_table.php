@@ -13,14 +13,18 @@ return new class extends Migration
     {
         Schema::create('cashiers', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('people_id')->constrained()->onDelete('cascade');
+            $table->foreignId('user_id')->unique()->constrained()->onDelete('cascade');
             $table->string('cashier_number')->unique();
-            $table->foreignId('pos_id')->nullable()->constrained()->nullOnDelete(); // Point de vente assigné
-            $table->decimal('opening_balance', 10, 2)->default(0); // Fonds de caisse initial
-            $table->time('shift_start')->nullable(); // Début de service
-            $table->time('shift_end')->nullable(); // Fin de service
+            $table->foreignId('location_id')->nullable()->constrained()->nullOnDelete();
+            $table->decimal('opening_balance', 10, 2)->default(0);
+            $table->time('shift_start')->nullable();
+            $table->time('shift_end')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->timestamp('last_login_at')->nullable();
             $table->timestamps();
+
+            $table->index('is_active');
+            $table->index('pos_id');
         });
     }
 

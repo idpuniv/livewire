@@ -14,14 +14,16 @@ return new class extends Migration
         Schema::create('payments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->constrained()->onDelete('cascade');
-            $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->decimal('amount', 10, 2);
-            $table->string('payment_method')->default('cash'); // cash, card, mobile_money, etc.
-            $table->string('status')->default('pending'); // pending, completed, failed, refunded
-            $table->string('reference')->nullable()->unique(); // Référence unique du paiement
-            $table->json('payment_details')->nullable(); // Détails supplémentaires (numéro de carte, mobile, etc.)
+            $table->string('payment_method')->default('cash');
+            $table->string('status')->default('pending')->index();
+            $table->string('reference')->nullable()->unique();
+            $table->json('payment_details')->nullable();
             $table->timestamp('paid_at')->nullable();
             $table->timestamps();
+
+            $table->index(['order_id', 'status']);
         });
     }
 

@@ -36,6 +36,12 @@ class UserSeeder extends Seeder
                 'password' => 'cashier',
                 'role' => Roles::CASHIER
             ],
+            [
+                'email' => 'manager@example.com',
+                'name' => 'Gestionnaire de stock',
+                'password' => 'manager',
+                'role' => Roles::STOCK_MANAGER
+            ],
         ];
 
         foreach ($users as $userData) {

@@ -22,8 +22,10 @@ Route::middleware('auth')->group(function () {
 });
 
 
-Route::livewire('/products', 'pages::products.index');
-Route::livewire('/promotions', 'pages::promotions.index');
+Route::middleware('auth')->group(function () {
+    Route::livewire('/products', 'pages::products.index');
+    Route::livewire('/promotions', 'pages::promotions.index');
+});
 
 Route::livewire('/caisse', 'pages::payments.create');
 Route::livewire('/users', 'pages::users.create');
@@ -32,6 +34,7 @@ Route::livewire('/users2', 'pages::users.create2');
 Route::middleware('auth')->group(function () {
     Route::livewire('/ventes', 'pages::sales.create');
     Route::livewire('/orders', 'pages::orders.index');
+    Route::livewire('/stocks', 'pages::stocks.index');
 });
 
 Route::get('/products/list', function () {
@@ -40,9 +43,8 @@ Route::get('/products/list', function () {
 
 Route::middleware('auth')->group(function () {
 
-Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
-Route::post('/settings/update', [SettingController::class, 'update'])->name('settings.update');
-
+    Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+    Route::post('/settings/update', [SettingController::class, 'update'])->name('settings.update');
 });
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';

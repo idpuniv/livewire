@@ -13,7 +13,7 @@ new class extends Component {
     public ?Order $order = null;
     public ?Cart $cart = null;
 
-    public $amountPaid = 0;
+    public $amountPaid = ''; // Chaîne vide au lieu de 0
     public float $change = 0;
     public string $paymentMethod = 'cash';
     public float $total = 0;
@@ -40,10 +40,16 @@ new class extends Component {
         'customerSelected' => 'setCustomer',
     ];
 
+    // Comme dans l'exemple, on convertit seulement quand nécessaire
+    private function getNumericAmount(): int
+    {
+        return $this->amountPaid === '' ? 0 : intval($this->amountPaid);
+    }
+
     public function setCustomer($customerData)
     {
         $this->customer = $customerData;
-        Log::info('Client sélectionné:', $customerData);
+        Log::info('Client sélectionné from pay:', $customerData);
     }
 
     public function clearCustomerSelection()
@@ -76,6 +82,7 @@ new class extends Component {
     {
         $this->order = $order;
         $this->cart = $cart;
+        $this->amountPaid = ''; // Chaîne vide au montage
         $this->syncAmounts();
     }
 
@@ -88,6 +95,7 @@ new class extends Component {
             $this->cart = Cart::with(['items'])->find($this->cart->id);
         }
 
+        $this->amountPaid = ''; // Reset à chaque rafraîchissement
         $this->syncAmounts();
     }
 
@@ -95,6 +103,7 @@ new class extends Component {
     {
         $this->cart = Cart::with(['items'])->find($cartId);
         $this->order = null;
+        $this->amountPaid = ''; // Reset
         $this->syncAmounts();
     }
 
@@ -102,6 +111,7 @@ new class extends Component {
     {
         $this->order = Order::with(['items', 'invoice'])->find($orderId);
         $this->cart = null;
+        $this->amountPaid = ''; // Reset
         $this->syncAmounts();
     }
 
@@ -110,7 +120,7 @@ new class extends Component {
         Log::info('handleOrderCreated appelé', ['orderId' => $orderId, 'amountPaid' => $amountPaid]);
 
         $this->order = Order::with(['items', 'invoice'])->find($orderId);
-        $this->amountPaid = $amountPaid;
+        $this->amountPaid = ''; // Chaîne vide, on ignore le amountPaid passé
         $this->syncAmounts();
 
         $this->processPayment();
@@ -118,6 +128,7 @@ new class extends Component {
 
     public function updatedAmountPaid(): void
     {
+        // Comme dans l'exemple, on ne fait que les calculs
         $this->calculateChange();
     }
 
@@ -136,7 +147,8 @@ new class extends Component {
 
     private function calculateChange(): void
     {
-        $this->change = $this->paymentService->calculateChange(floatval($this->amountPaid ?? 0), $this->total);
+        $amount = $this->getNumericAmount();
+        $this->change = $this->paymentService->calculateChange($amount, $this->total);
     }
 
     public function getCanPayProperty()
@@ -144,13 +156,16 @@ new class extends Component {
         if (!$this->canProcessPayment) {
             return false;
         }
+        
+        $amount = $this->getNumericAmount();
+        
         // Cas 1 : Commande existante
         if ($this->order) {
             if (!$this->order->invoice) {
                 return false;
             }
             if ($this->paymentMethod === 'cash') {
-                return $this->amountPaid >= $this->total;
+                return $amount >= $this->total;
             }
             return true;
         }
@@ -158,7 +173,7 @@ new class extends Component {
         // Cas 2 : Panier avec articles
         if ($this->cart && $this->cart->items()->count() > 0) {
             if ($this->paymentMethod === 'cash') {
-                return $this->amountPaid >= $this->total;
+                return $amount >= $this->total;
             }
             return true;
         }
@@ -172,6 +187,9 @@ new class extends Component {
             session()->flash('error', 'Vous n\'avez pas la permission de traiter les paiements');
             return;
         }
+        
+        $amount = $this->getNumericAmount();
+        
         // Cas 1 : Paiement d'une commande existante
         if ($this->order) {
             $this->processPayment();
@@ -185,23 +203,28 @@ new class extends Component {
                 return;
             }
 
-            if ($this->paymentMethod === 'cash' && $this->amountPaid < $this->total) {
+            if ($this->paymentMethod === 'cash' && $amount < $this->total) {
                 session()->flash('error', 'Montant insuffisant.');
                 return;
             }
 
             try {
-                // Utiliser CheckoutService pour créer ET payer en une transaction
-                $result = $this->checkoutService->createOrderAndPay($this->cart, floatval($this->amountPaid ?? 0), $this->paymentMethod, $this->customer);
+                Log::info('Création et paiement du panier', [
+                    'cart_id' => $this->cart->id,
+                    'amount' => $amount,
+                    'payment_method' => $this->paymentMethod,
+                    'customer_id' => $this->customer['id'] ?? null,
+                ]);
+                $result = $this->checkoutService->createOrderAndPay($this->cart, $amount, $this->paymentMethod, $this->customer);
 
                 Log::info('Résultat checkout', $result);
 
                 if ($result['success']) {
                     $this->paymentStatus = 'success';
-
                     $this->dispatch('clearCart2');
                     $this->order = null;
                     $this->cart = null;
+                    $this->amountPaid = ''; // Reset après paiement
                     $this->syncAmounts();
 
                     session()->flash('success', $result['message']);
@@ -233,8 +256,10 @@ new class extends Component {
             return;
         }
 
+        $amount = $this->getNumericAmount();
+
         try {
-            $result = $this->paymentService->processPayment($this->order, floatval($this->amountPaid ?? 0), $this->paymentMethod);
+            $result = $this->paymentService->processPayment($this->order, $amount, $this->paymentMethod);
 
             Log::info('Résultat processPayment', $result);
 
@@ -242,12 +267,11 @@ new class extends Component {
                 $this->paymentStatus = 'success';
                 $this->dispatch('showMobileReceipt');
 
-                // Recharger la commande pour avoir les dernières infos
                 $this->order = Order::with(['items', 'invoice'])->find($this->order->id);
-
                 $this->dispatch('clearCart2');
                 $this->order = null;
                 $this->cart = null;
+                $this->amountPaid = ''; // Reset après paiement
                 $this->syncAmounts();
 
                 $this->dispatch('paymentStatus', status: 'success');
@@ -321,20 +345,28 @@ new class extends Component {
                 </small>
             </div>
 
-            {{-- Montant remis avec message en hauteur fixe --}}
+            {{-- Montant remis avec style calculatrice --}}
             <div class="mb-3">
                 <label class="form-label small fw-medium text-secondary mb-1">Montant remis</label>
                 <div class="input-group">
-                    <input type="number" class="form-control form-control-lg bg-light border-0" placeholder="0"
-                        step="0.01" wire:model.live="amountPaid" />
+                    <input type="text" 
+                        class="form-control form-control-lg bg-light border-0 text-end fw-bold" 
+                        placeholder="0"
+                        style="font-size: 1.5rem;"
+                        inputmode="numeric"
+                        wire:model.live="amountPaid"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
                     <span class="input-group-text bg-light border-0 text-secondary">XOF</span>
                 </div>
-                {{-- Hauteur fixe pour éviter le repositionnement --}}
+                {{-- Message de validation --}}
                 <div class="mt-2 small" style="height: 20px;">
-                    @if ($amountPaid > 0)
-                        <span class="{{ $amountPaid >= $total ? 'text-success' : 'text-danger' }}">
-                            <i class="fas fa-{{ $amountPaid >= $total ? 'check-circle' : 'exclamation-circle' }} me-1"></i>
-                            {{ $amountPaid >= $total ? 'Montant suffisant' : 'Montant insuffisant' }}
+                    @php
+                        $amount = $this->getNumericAmount();
+                    @endphp
+                    @if ($amount > 0)
+                        <span class="{{ $amount >= $total ? 'text-success' : 'text-danger' }}">
+                            <i class="fas fa-{{ $amount >= $total ? 'check-circle' : 'exclamation-circle' }} me-1"></i>
+                            {{ $amount >= $total ? 'Montant suffisant' : 'Montant insuffisant' }}
                         </span>
                     @endif
                 </div>
@@ -363,6 +395,9 @@ new class extends Component {
 
                 {{-- Récapitulatif du dernier paiement (quand success et plus de commande) --}}
                 @if ($paymentStatus === 'success' && !$order && !$cart)
+                    @php
+                        $amount = $this->getNumericAmount();
+                    @endphp
                     <div class="position-absolute start-50 translate-middle-x" style="top: 20px; width: 90%;">
                         {{-- Petit indicateur "Dernier paiement" --}}
                         <div class="text-center mb-1">
@@ -387,7 +422,7 @@ new class extends Component {
                             </div>
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-secondary">Reçu</span>
-                                <span class="fw-bold">{{ number_format($amountPaid, 0) }} XOF</span>
+                                <span class="fw-bold">{{ number_format($amount, 0) }} XOF</span>
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span class="text-secondary">Monnaie</span>

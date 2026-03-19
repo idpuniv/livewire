@@ -4,12 +4,14 @@ namespace App\Roles;
 
 use App\Permissions\OrderPermissions;
 use App\Permissions\PaymentPermissions;
+use App\Permissions\ProductPermissions;
 use App\Permissions\SystemPermissions;
 
 final class Roles
 {
     public const ADMIN = 'admin';
     public const CASHIER = 'cashier';
+    public const STOCK_MANAGER = 'stock_manager';
 
     public static function web(): array
     {
@@ -26,9 +28,27 @@ final class Roles
                     PaymentPermissions::VIEW,
                     PaymentPermissions::UPDATE,
                     PaymentPermissions::DELETE,
+                    ProductPermissions::VIEW,
+                    ProductPermissions::LIST,
+                    ProductPermissions::CREATE,
+                    ProductPermissions::UPDATE,
+                    ProductPermissions::DELETE,
+                    ProductPermissions::STOCK_CREATE,
+                    ProductPermissions::STOCK_HISTORY,
+                    ProductPermissions::STOCK_ADJUST,
                 ]
             ],
-            
+            self::STOCK_MANAGER => [
+                'label' => 'Gestionnaire de stock',
+                'permissions' => [
+                    ProductPermissions::VIEW,
+                    ProductPermissions::LIST,
+                    ProductPermissions::STOCK_CREATE,
+                    ProductPermissions::STOCK_ADJUST,
+                    ProductPermissions::STOCK_HISTORY,
+                ]
+            ],
+
             self::CASHIER => [
                 'label' => 'Caissier',
                 'permissions' => [
@@ -49,6 +69,7 @@ final class Roles
                 'permissions' => [
                     ...OrderPermissions::all(),
                     ...PaymentPermissions::all(),
+                    ...ProductPermissions::all(),
                     // ...UserPermissions::all(),
                     // ...SystemPermissions::all(),
                 ]
@@ -63,7 +84,7 @@ final class Roles
 
     public static function of(string $guard): array
     {
-        return match($guard) {
+        return match ($guard) {
             'web' => self::web(),
             default => [],
         };

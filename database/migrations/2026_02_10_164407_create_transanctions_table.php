@@ -11,17 +11,23 @@ return new class extends Migration
      */
     public function up(): void
     {
-         Schema::create('transactions', function (Blueprint $table) {
+        Schema::create('transactions', function (Blueprint $table) {
             $table->id();
             $table->string('reference')->unique();
             $table->foreignId('payment_id')->constrained()->onDelete('cascade');
-            $table->string('transaction_type'); // payment, refund, adjustment
+            $table->string('transaction_type');
             $table->decimal('amount', 10, 2);
-            $table->string('status')->default('pending'); // pending, success, failed
-            $table->string('gateway_reference')->nullable(); // Référence du système externe (gateway)
-            $table->json('gateway_response')->nullable(); // Réponse brute du gateway
-            $table->json('metadata')->nullable(); // Données supplémentaires
+            $table->string('status')->default('pending');
+            $table->string('gateway_reference')->nullable();
+            $table->json('gateway_response')->nullable();
+            $table->json('metadata')->nullable();
             $table->timestamps();
+
+            $table->index('transaction_type');
+            $table->index('status');
+            $table->index('gateway_reference');
+            $table->index('created_at');
+            $table->index(['payment_id', 'status']);
         });
     }
 
