@@ -5,9 +5,9 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\WebhookController;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// Route::get('/', function () {
+//     return view('welcome');
+// });
 
 Route::post('printer', [WebhookController::class, 'printer'])->name('printer.webhook');
 
@@ -32,7 +32,7 @@ Route::livewire('/users', 'pages::users.create');
 Route::livewire('/users2', 'pages::users.create2');
 
 Route::middleware('auth')->group(function () {
-    Route::livewire('/ventes', 'pages::sales.create');
+    Route::livewire('/', 'pages::sales.create');
     Route::livewire('/orders', 'pages::orders.index');
     Route::livewire('/stocks', 'pages::stocks.index');
 });
